@@ -50,8 +50,8 @@ export function generateDocumentation(fileNames: string[], options: ts.CompilerO
         setAllParentTypes(key);
     }
     // print out the doc
-    fs.writeFileSync(process.cwd() + "/doc_generator/classes.json", JSON.stringify(outputClasses, undefined, 4));
-    fs.writeFileSync(process.cwd() + "/doc_generator/pmes.json", JSON.stringify(outputPMEs, undefined, 4));
+    fs.writeFileSync(process.cwd() + "/docs/classes.json", JSON.stringify(outputClasses, undefined, 4));
+    fs.writeFileSync(process.cwd() + "/docs/pmes.json", JSON.stringify(outputPMEs, undefined, 4));
 
     return;
 
