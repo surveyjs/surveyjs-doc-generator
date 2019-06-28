@@ -2,14 +2,14 @@
 exports.__esModule = true;
 var ts = require("typescript");
 var fs = require("fs");
-;
 var jsonObjMetaData = null;
 function setJsonObj(obj) {
     jsonObjMetaData = obj;
 }
 exports.setJsonObj = setJsonObj;
 /** Generate documentation for all classes in a set of .ts files */
-function generateDocumentation(fileNames, options) {
+function generateDocumentation(fileNames, options, docOptions) {
+    if (docOptions === void 0) { docOptions = null; }
     // Build a program using the set of root file names in fileNames
     var program = ts.createProgram(fileNames, options);
     // Get the checker, we will use it to find more about classes
@@ -20,7 +20,10 @@ function generateDocumentation(fileNames, options) {
     var classesHash = {};
     var curClass = null;
     var curJsonName = null;
-    // Visit every sourceFile in the program    
+    var generateJSONDefinitionClasses = {};
+    var generateJSONDefinition = !!docOptions && docOptions.generateJSONDefinition == true;
+    var outputDefinition = {};
+    // Visit every sourceFile in the program
     for (var _i = 0, _a = program.getSourceFiles(); _i < _a.length; _i++) {
         var sourceFile = _a[_i];
         if (sourceFile.fileName.indexOf("node_modules") > 0)
@@ -34,6 +37,12 @@ function generateDocumentation(fileNames, options) {
     // print out the doc
     fs.writeFileSync(process.cwd() + "/docs/classes.json", JSON.stringify(outputClasses, undefined, 4));
     fs.writeFileSync(process.cwd() + "/docs/pmes.json", JSON.stringify(outputPMEs, undefined, 4));
+    if (!!generateJSONDefinition) {
+        outputDefinition["$schema"] = "http://json-schema.org/draft-07/schema#";
+        outputDefinition["title"] = "SurveyJS Library json schema";
+        addClassIntoJSONDefinition("SurveyModel", true);
+        fs.writeFileSync(process.cwd() + "/docs/surveyjs_definition.json", JSON.stringify(outputDefinition, undefined, 4));
+    }
     return;
     /** set allParentTypes */
     function setAllParentTypes(className) {
@@ -99,6 +108,8 @@ function generateDocumentation(fileNames, options) {
                             outputPMEs[i].defaultValue = properties[j].defaultValue;
                         if (properties[j].choices)
                             outputPMEs[i].serializedChoices = properties[j].choices;
+                        if (properties[j].className)
+                            outputPMEs[i].jsonClassName = properties[j].className;
                         break;
                     }
                 }
@@ -128,7 +139,7 @@ function generateDocumentation(fileNames, options) {
             var fullName = ser.name;
             if (curClass) {
                 ser.className = curClass.name;
-                fullName = curClass.name + '.' + fullName;
+                fullName = curClass.name + "." + fullName;
             }
             ser.pmeType = getPMEType(node.kind);
             if (ser.type.indexOf("Event") === 0)
@@ -213,11 +224,15 @@ function generateDocumentation(fileNames, options) {
             return details;
         // Get the construct signatures
         var constructorType = checker.getTypeOfSymbolAtLocation(symbol, symbol.valueDeclaration);
-        details.constructors = constructorType.getConstructSignatures().map(serializeSignature);
+        details.constructors = constructorType
+            .getConstructSignatures()
+            .map(serializeSignature);
         //get base class
         details.baseType = "";
         var classDeclaration = node;
-        if (classDeclaration && classDeclaration.heritageClauses && classDeclaration.heritageClauses.length > 0) {
+        if (classDeclaration &&
+            classDeclaration.heritageClauses &&
+            classDeclaration.heritageClauses.length > 0) {
             var firstHeritageClause = classDeclaration.heritageClauses[0];
             var firstHeritageClauseType = firstHeritageClause.types[0];
             var extendsType = checker.getTypeAtLocation(firstHeritageClauseType.expression);
@@ -230,7 +245,8 @@ function generateDocumentation(fileNames, options) {
     /** Serialize a method symbol infomration */
     function serializeMethod(symbol, node) {
         var details = serializeSymbol(symbol);
-        if (node.kind === ts.SyntaxKind.MethodDeclaration || node.kind === ts.SyntaxKind.FunctionDeclaration) {
+        if (node.kind === ts.SyntaxKind.MethodDeclaration ||
+            node.kind === ts.SyntaxKind.FunctionDeclaration) {
             var signature = checker.getSignatureFromDeclaration(node);
             var funDetails = serializeSignature(signature);
             details.parameters = funDetails.parameters;
@@ -250,19 +266,154 @@ function generateDocumentation(fileNames, options) {
     }
     /** True if this is visible outside this file, false otherwise */
     function isNodeExported(node) {
-        return (node.flags & ts.NodeFlags["Export"]) !== 0 || (node.parent && node.parent.kind === ts.SyntaxKind.SourceFile);
+        return ((node.flags & ts.NodeFlags["Export"]) !== 0 ||
+            (node.parent && node.parent.kind === ts.SyntaxKind.SourceFile));
     }
     function isPMENodeExported(node) {
         var modifier = ts.getCombinedModifierFlags(node);
         if ((modifier & ts.ModifierFlags.Public) !== 0)
             return true;
         var parent = node.parent;
-        return parent && (parent.kind === ts.SyntaxKind.InterfaceDeclaration);
+        return parent && parent.kind === ts.SyntaxKind.InterfaceDeclaration;
     }
     /** True if there is a comment before declaration */
     function isSymbolHasComments(symbol) {
         var com = symbol.getDocumentationComment();
         return com && com.length > 0;
+    }
+    function addClassIntoJSONDefinition(className, isRoot) {
+        if (isRoot === void 0) { isRoot = false; }
+        if (className == "IElement") {
+            className = "SurveyElement";
+        }
+        if (!!generateJSONDefinitionClasses[className])
+            return;
+        generateJSONDefinitionClasses[className] = true;
+        var curClass = classesHash[className];
+        if (!isRoot && (!curClass || !hasSerializedProperties(className))) {
+            addChildrenClasses(className);
+            return;
+        }
+        if (!curClass || (!isRoot && hasClassInJSONDefinition(className)))
+            return;
+        var root = outputDefinition;
+        if (!isRoot) {
+            if (!outputDefinition["definitions"]) {
+                outputDefinition["definitions"] = {};
+            }
+            outputDefinition["definitions"][curClass.jsonName] = {};
+            root = outputDefinition["definitions"][curClass.jsonName];
+            root["$id"] = "#" + curClass.jsonName;
+        }
+        root["type"] = "object";
+        addPropertiesIntoJSONDefinion(curClass, root);
+        if (!isRoot) {
+            addParentClass(curClass, root);
+            addChildrenClasses(curClass.name);
+        }
+    }
+    function addParentClass(curClass, root) {
+        if (!curClass.baseType)
+            return;
+        addClassIntoJSONDefinition(curClass.baseType);
+        var parentClass = classesHash[curClass.baseType];
+        if (!!parentClass && hasClassInJSONDefinition(parentClass.jsonName)) {
+            var properties = root["properties"];
+            delete root["properties"];
+            root["allOff"] = [
+                { $ref: "#" + parentClass.jsonName },
+                { properties: properties }
+            ];
+        }
+    }
+    function addChildrenClasses(className) {
+        for (var i = 0; i < outputClasses.length; i++) {
+            if (outputClasses[i].baseType == className) {
+                addClassIntoJSONDefinition(outputClasses[i].name);
+            }
+        }
+    }
+    function hasClassInJSONDefinition(className) {
+        return (!!outputDefinition["definitions"] &&
+            !!outputDefinition["definitions"][className]);
+    }
+    function addPropertiesIntoJSONDefinion(curClass, jsonDef) {
+        for (var i = 0; i < outputPMEs.length; i++) {
+            var property = outputPMEs[i];
+            if (property.className !== curClass.name || !property.isSerialized)
+                continue;
+            addPropertyIntoJSONDefinion(property, jsonDef);
+        }
+    }
+    function hasSerializedProperties(className) {
+        for (var i = 0; i < outputPMEs.length; i++) {
+            var property = outputPMEs[i];
+            if (property.className == className && property.isSerialized)
+                return true;
+        }
+        return false;
+    }
+    function addPropertyIntoJSONDefinion(property, jsonDef) {
+        if (!jsonDef.properties) {
+            jsonDef.properties = {};
+        }
+        var properties = jsonDef.properties;
+        var typeName = property.type;
+        var isArray = !!typeName && typeName.indexOf("[]") > -1;
+        if (!!property.jsonClassName || isArray) {
+            addClassIntoJSONDefinition(typeName.replace("[]", ""));
+        }
+        var typeInfo = getTypeValue(property);
+        var propInfo = { type: typeInfo };
+        if (isArray) {
+            propInfo = { type: "array", items: typeInfo };
+        }
+        if (!!property.serializedChoices &&
+            Array.isArray(property.serializedChoices) &&
+            property.serializedChoices.length > 1) {
+            propInfo["enum"] = property.serializedChoices;
+        }
+        properties[property.name] = propInfo;
+    }
+    function getTypeValue(property) {
+        var propType = property.type;
+        if (propType.indexOf("|") > 0)
+            return ["boolean", "string"];
+        if (propType == "any")
+            return ["string", "numeric", "boolean"];
+        if (propType == "string" || propType == "numeric" || propType == "boolean")
+            return propType;
+        var childrenTypes = [];
+        addChildrenTypes(propType.replace("[]", ""), childrenTypes);
+        if (childrenTypes.length == 1)
+            return getReferenceType(childrenTypes[0]);
+        if (childrenTypes.length > 1) {
+            var res = [];
+            for (var i = 0; i < childrenTypes.length; i++) {
+                res.push(getReferenceType(childrenTypes[i]));
+            }
+            return res;
+        }
+        return getReferenceType(propType.replace("[]", ""));
+    }
+    function addChildrenTypes(type, childrenTypes) {
+        if (type == "IElement")
+            type = "SurveyElement";
+        for (var i = 0; i < outputClasses.length; i++) {
+            if (outputClasses[i].baseType == type) {
+                var count = childrenTypes.length;
+                addChildrenTypes(outputClasses[i].name, childrenTypes);
+                if (count == childrenTypes.length) {
+                    childrenTypes.push(outputClasses[i].name);
+                }
+            }
+        }
+    }
+    function getReferenceType(type) {
+        var curClass = classesHash[type];
+        if (!curClass)
+            return type;
+        return { $href: "#" + curClass.jsonName };
     }
 }
 exports.generateDocumentation = generateDocumentation;
