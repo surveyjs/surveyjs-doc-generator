@@ -176,6 +176,7 @@ export function generateDocumentation(
       let fullName = ser.name;
       if (curClass) {
         ser.className = curClass.name;
+        ser.jsonName = curClass.jsonName;
         fullName = curClass.name + "." + fullName;
       }
       ser.pmeType = getPMEType(node.kind);
@@ -232,7 +233,7 @@ export function generateDocumentation(
     var res = {
       name: symbol.getName(),
       documentation: ts.displayPartsToString(symbol.getDocumentationComment()),
-      type: checker.typeToString(type)
+      type: checker.typeToString(type),
     };
     var jsTags = symbol.getJsDocTags();
     if (jsTags) {
@@ -290,9 +291,9 @@ export function generateDocumentation(
       node.kind === ts.SyntaxKind.MethodDeclaration ||
       node.kind === ts.SyntaxKind.FunctionDeclaration
     ) {
-      let signature = checker.getSignatureFromDeclaration(<
-        ts.SignatureDeclaration
-      >node);
+      let signature = checker.getSignatureFromDeclaration(
+        <ts.SignatureDeclaration>node
+      );
       let funDetails = serializeSignature(signature);
       details.parameters = funDetails.parameters;
       if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
@@ -309,7 +310,7 @@ export function generateDocumentation(
       returnType: checker.typeToString(signature.getReturnType()),
       documentation: ts.displayPartsToString(
         signature.getDocumentationComment()
-      )
+      ),
     };
   }
 
@@ -371,7 +372,7 @@ export function generateDocumentation(
       delete root["properties"];
       root["allOff"] = [
         { $ref: "#" + parentClass.jsonName },
-        { properties: properties }
+        { properties: properties },
       ];
     }
   }
