@@ -1,5 +1,6 @@
 "use strict";
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.generateDocumentation = exports.setJsonObj = void 0;
 var ts = require("typescript");
 var fs = require("fs");
 var jsonObjMetaData = null;
@@ -51,15 +52,21 @@ function generateDocumentation(fileNames, options, docOptions) {
         var curClass = classesHash[className];
         if (curClass.allTypes && curClass.allTypes.length > 0)
             return;
+        setAllParentTypesCore(curClass);
+    }
+    function setAllParentTypesCore(curClass) {
         curClass.allTypes = [];
         curClass.allTypes.push(curClass.name);
         if (!curClass.baseType)
             return;
         var baseClass = classesHash[curClass.baseType];
-        if (baseClass && baseClass.allTypes) {
-            for (var i = 0; i < baseClass.allTypes.length; i++) {
-                curClass.allTypes.push(baseClass.allTypes[i]);
-            }
+        if (!baseClass)
+            return;
+        if (!baseClass.allTypes) {
+            setAllParentTypesCore(baseClass);
+        }
+        for (var i = 0; i < baseClass.allTypes.length; i++) {
+            curClass.allTypes.push(baseClass.allTypes[i]);
         }
     }
     /** visit nodes finding exported classes */
@@ -139,6 +146,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             var fullName = ser.name;
             if (curClass) {
                 ser.className = curClass.name;
+                ser.jsonName = curClass.jsonName;
                 fullName = curClass.name + "." + fullName;
             }
             ser.pmeType = getPMEType(node.kind);
@@ -201,7 +209,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         var res = {
             name: symbol.getName(),
             documentation: ts.displayPartsToString(symbol.getDocumentationComment()),
-            type: checker.typeToString(type)
+            type: checker.typeToString(type),
         };
         var jsTags = symbol.getJsDocTags();
         if (jsTags) {
@@ -261,7 +269,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         return {
             parameters: signature.parameters.map(serializeSymbol),
             returnType: checker.typeToString(signature.getReturnType()),
-            documentation: ts.displayPartsToString(signature.getDocumentationComment())
+            documentation: ts.displayPartsToString(signature.getDocumentationComment()),
         };
     }
     /** True if this is visible outside this file, false otherwise */
@@ -322,7 +330,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             delete root["properties"];
             root["allOff"] = [
                 { $ref: "#" + parentClass.jsonName },
-                { properties: properties }
+                { properties: properties },
             ];
         }
     }
@@ -417,3 +425,4 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
 }
 exports.generateDocumentation = generateDocumentation;
+//# sourceMappingURL=index.js.map

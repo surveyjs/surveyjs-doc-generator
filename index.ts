@@ -84,14 +84,19 @@ export function generateDocumentation(
     if (!className) return;
     var curClass = classesHash[className];
     if (curClass.allTypes && curClass.allTypes.length > 0) return;
+    setAllParentTypesCore(curClass);
+  }
+  function setAllParentTypesCore(curClass: any) {
     curClass.allTypes = [];
     curClass.allTypes.push(curClass.name);
     if (!curClass.baseType) return;
     var baseClass = classesHash[curClass.baseType];
-    if (baseClass && baseClass.allTypes) {
-      for (var i = 0; i < baseClass.allTypes.length; i++) {
-        curClass.allTypes.push(baseClass.allTypes[i]);
-      }
+    if (!baseClass) return;
+    if (!baseClass.allTypes) {
+      setAllParentTypesCore(baseClass);
+    }
+    for (var i = 0; i < baseClass.allTypes.length; i++) {
+      curClass.allTypes.push(baseClass.allTypes[i]);
     }
   }
   /** visit nodes finding exported classes */
@@ -416,7 +421,7 @@ export function generateDocumentation(
       addClassIntoJSONDefinition(typeName.replace("[]", ""));
     }
     var typeInfo: any = getTypeValue(property);
-    var propInfo = { type: typeInfo };
+    var propInfo: any = { type: typeInfo };
     if (isArray) {
       propInfo = { type: "array", items: typeInfo };
     }
