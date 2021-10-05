@@ -329,6 +329,7 @@ export function generateDocumentation(
   function isPMENodeExported(node: ts.Node): boolean {
     let modifier = ts.getCombinedModifierFlags(node);
     if ((modifier & ts.ModifierFlags.Public) !== 0) return true;
+    if(node.kind === ts.SyntaxKind.PropertyDeclaration) return true;
     var parent = node.parent;
     return parent && parent.kind === ts.SyntaxKind.InterfaceDeclaration;
   }

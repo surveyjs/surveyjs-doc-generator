@@ -1,5 +1,5 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+exports.__esModule = true;
 exports.generateDocumentation = exports.setJsonObj = void 0;
 var ts = require("typescript");
 var fs = require("fs");
@@ -209,7 +209,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         var res = {
             name: symbol.getName(),
             documentation: ts.displayPartsToString(symbol.getDocumentationComment()),
-            type: checker.typeToString(type),
+            type: checker.typeToString(type)
         };
         var jsTags = symbol.getJsDocTags();
         if (jsTags) {
@@ -269,7 +269,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         return {
             parameters: signature.parameters.map(serializeSymbol),
             returnType: checker.typeToString(signature.getReturnType()),
-            documentation: ts.displayPartsToString(signature.getDocumentationComment()),
+            documentation: ts.displayPartsToString(signature.getDocumentationComment())
         };
     }
     /** True if this is visible outside this file, false otherwise */
@@ -280,6 +280,8 @@ function generateDocumentation(fileNames, options, docOptions) {
     function isPMENodeExported(node) {
         var modifier = ts.getCombinedModifierFlags(node);
         if ((modifier & ts.ModifierFlags.Public) !== 0)
+            return true;
+        if (node.kind === ts.SyntaxKind.PropertyDeclaration)
             return true;
         var parent = node.parent;
         return parent && parent.kind === ts.SyntaxKind.InterfaceDeclaration;
@@ -425,4 +427,3 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
 }
 exports.generateDocumentation = generateDocumentation;
-//# sourceMappingURL=index.js.map

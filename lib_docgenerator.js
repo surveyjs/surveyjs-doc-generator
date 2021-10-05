@@ -1,6 +1,6 @@
 var doc = require("./index.js");
 var ts = require("typescript");
-var Survey = require("../survey-library/packages/survey-knockout/survey.ko");
+var Survey = require("../survey-library/build/survey-knockout/survey.ko");
 
 doc.setJsonObj(Survey.JsonObject.metaData);
 
