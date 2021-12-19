@@ -9,6 +9,7 @@ var DocEntryType;
     DocEntryType[DocEntryType["classType"] = 1] = "classType";
     DocEntryType[DocEntryType["interfaceType"] = 2] = "interfaceType";
     DocEntryType[DocEntryType["functionType"] = 3] = "functionType";
+    DocEntryType[DocEntryType["variableType"] = 4] = "variableType";
 })(DocEntryType || (DocEntryType = {}));
 ;
 var jsonObjMetaData = null;
@@ -68,24 +69,24 @@ function generateDocumentation(fileNames, options, docOptions) {
     function setAllParentTypes(className) {
         if (!className)
             return;
-        var curClass = classesHash[className];
-        if (curClass.allTypes && curClass.allTypes.length > 0)
+        var cur = classesHash[className];
+        if (cur.allTypes && cur.allTypes.length > 0)
             return;
-        setAllParentTypesCore(curClass);
+        setAllParentTypesCore(cur);
     }
-    function setAllParentTypesCore(curClass) {
-        curClass.allTypes = [];
-        curClass.allTypes.push(curClass.name);
-        if (!curClass.baseType)
+    function setAllParentTypesCore(cur) {
+        cur.allTypes = [];
+        cur.allTypes.push(cur.name);
+        if (!cur.baseType)
             return;
-        var baseClass = classesHash[curClass.baseType];
+        var baseClass = classesHash[cur.baseType];
         if (!baseClass)
             return;
         if (!baseClass.allTypes) {
             setAllParentTypesCore(baseClass);
         }
         for (var i = 0; i < baseClass.allTypes.length; i++) {
-            curClass.allTypes.push(baseClass.allTypes[i]);
+            cur.allTypes.push(baseClass.allTypes[i]);
         }
     }
     /** visit nodes finding exported classes */
@@ -93,7 +94,17 @@ function generateDocumentation(fileNames, options, docOptions) {
         // Only consider exported nodes
         if (!isNodeExported(node))
             return;
-        if (node.kind === ts.SyntaxKind.ClassDeclaration) {
+        if (node.kind === ts.SyntaxKind.VariableStatement) {
+            var vsNode = node;
+            if (vsNode.declarationList.declarations.length > 0) {
+                var varNode = vsNode.declarationList.declarations[0];
+                var symbol = checker.getSymbolAtLocation(varNode.name);
+                if (isSymbolHasComments(symbol)) {
+                    visitVariableNode(varNode, symbol);
+                }
+            }
+        }
+        else if (node.kind === ts.SyntaxKind.ClassDeclaration) {
             // This is a top level class, get its symbol
             var symbol = checker.getSymbolAtLocation(node.name);
             if (isSymbolHasComments(symbol)) {
@@ -110,6 +121,32 @@ function generateDocumentation(fileNames, options, docOptions) {
         else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
             // This is a namespace, visit its children
             ts.forEachChild(node, visit);
+        }
+    }
+    function visitVariableNode(node, symbol) {
+        var entry = serializeSymbol(symbol);
+        entry.entryType = DocEntryType.variableType;
+        dtsDeclarations[entry.name] = entry;
+        visitVariableProperties(entry, node);
+    }
+    function visitVariableProperties(entry, node) {
+        if (!node.initializer)
+            return;
+        var children = node.initializer.properties;
+        if (!Array.isArray(children))
+            return;
+        for (var i = 0; i < children.length; i++) {
+            visitVariableMember(entry, children[i]);
+        }
+    }
+    function visitVariableMember(entry, node) {
+        var symbol = checker.getSymbolAtLocation(node.name);
+        var memberEntry = serializeClass(symbol, node);
+        if (memberEntry) {
+            if (!entry.members)
+                entry.members = [];
+            entry.members.push(memberEntry);
+            visitVariableProperties(memberEntry, node);
         }
     }
     function visitDocumentedNode(node, symbol) {
@@ -174,6 +211,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             ser.pmeType = getPMEType(node.kind);
             if (node.kind === ts.SyntaxKind.PropertySignature) {
                 ser.isField = true;
+                ser.isOptional = checker.isOptionalParameter(node);
             }
             if (ser.type.indexOf("Event") === 0)
                 ser.pmeType = "event";
@@ -293,11 +331,19 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
     /** Serialize a signature (call or construct) */
     function serializeSignature(signature) {
-        return {
-            parameters: signature.parameters.map(serializeSymbol),
+        var params = signature.parameters;
+        var res = {
+            parameters: params.map(serializeSymbol),
             returnType: checker.typeToString(signature.getReturnType()),
             documentation: ts.displayPartsToString(signature.getDocumentationComment())
         };
+        for (var i = 0; i < params.length; i++) {
+            var node = params[i].valueDeclaration;
+            if (!!node) {
+                res.parameters[i].isOptional = checker.isOptionalParameter(node);
+            }
+        }
+        return res;
     }
     /** True if this is visible outside this file, false otherwise */
     function isNodeExported(node) {
@@ -326,34 +372,34 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!!generateJSONDefinitionClasses[className])
             return;
         generateJSONDefinitionClasses[className] = true;
-        var curClass = classesHash[className];
-        if (!isRoot && (!curClass || !hasSerializedProperties(className))) {
+        var cur = classesHash[className];
+        if (!isRoot && (!cur || !hasSerializedProperties(className))) {
             addChildrenClasses(className);
             return;
         }
-        if (!curClass || (!isRoot && hasClassInJSONDefinition(className)))
+        if (!cur || (!isRoot && hasClassInJSONDefinition(className)))
             return;
         var root = outputDefinition;
         if (!isRoot) {
             if (!outputDefinition["definitions"]) {
                 outputDefinition["definitions"] = {};
             }
-            outputDefinition["definitions"][curClass.jsonName] = {};
-            root = outputDefinition["definitions"][curClass.jsonName];
-            root["$id"] = "#" + curClass.jsonName;
+            outputDefinition["definitions"][cur.jsonName] = {};
+            root = outputDefinition["definitions"][cur.jsonName];
+            root["$id"] = "#" + cur.jsonName;
         }
         root["type"] = "object";
-        addPropertiesIntoJSONDefinion(curClass, root);
+        addPropertiesIntoJSONDefinion(cur, root);
         if (!isRoot) {
-            addParentClass(curClass, root);
-            addChildrenClasses(curClass.name);
+            addParentClass(cur, root);
+            addChildrenClasses(cur.name);
         }
     }
-    function addParentClass(curClass, root) {
-        if (!curClass.baseType)
+    function addParentClass(cur, root) {
+        if (!cur.baseType)
             return;
-        addClassIntoJSONDefinition(curClass.baseType);
-        var parentClass = classesHash[curClass.baseType];
+        addClassIntoJSONDefinition(cur.baseType);
+        var parentClass = classesHash[cur.baseType];
         if (!!parentClass && hasClassInJSONDefinition(parentClass.jsonName)) {
             var properties = root["properties"];
             delete root["properties"];
@@ -374,10 +420,10 @@ function generateDocumentation(fileNames, options, docOptions) {
         return (!!outputDefinition["definitions"] &&
             !!outputDefinition["definitions"][className]);
     }
-    function addPropertiesIntoJSONDefinion(curClass, jsonDef) {
+    function addPropertiesIntoJSONDefinion(cur, jsonDef) {
         for (var i = 0; i < outputPMEs.length; i++) {
             var property = outputPMEs[i];
-            if (property.className !== curClass.name || !property.isSerialized)
+            if (property.className !== cur.name || !property.isSerialized)
                 continue;
             addPropertyIntoJSONDefinion(property, jsonDef);
         }
@@ -474,6 +520,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     function getDtsDeclarations(lines) {
         var classes = [];
         var interfaces = [];
+        var variables = [];
         for (var key in dtsDeclarations) {
             var cur = dtsDeclarations[key];
             if (cur.entryType === DocEntryType.classType) {
@@ -481,6 +528,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
             if (cur.entryType === DocEntryType.interfaceType) {
                 interfaces.push(cur);
+            }
+            if (cur.entryType === DocEntryType.variableType) {
+                variables.push(cur);
             }
         }
         classes.sort(function (a, b) {
@@ -499,6 +549,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var i = 0; i < classes.length; i++) {
             getDtsDeclarationClass(lines, classes[i]);
         }
+        for (var i = 0; i < variables.length; i++) {
+            getDtsDeclarationVariable(lines, variables[i], 0);
+        }
     }
     function getDtsDeclarationClass(lines, entry) {
         var line = "export declare ";
@@ -513,6 +566,20 @@ function generateDocumentation(fileNames, options, docOptions) {
         getDtsDeclarationBody(lines, entry);
         lines.push("}");
     }
+    function getDtsDeclarationVariable(lines, entry, level) {
+        var line = (level === 0 ? "export declare var " : addTabs(level)) + entry.name + ": ";
+        var hasMembers = Array.isArray(entry.members);
+        line += hasMembers ? "{" : (getDtsType(entry.type) + ";");
+        lines.push(line);
+        if (hasMembers) {
+            for (var i = 0; i < entry.members.length; i++) {
+                if (isDtsPrevMemberTheSame(entry, i))
+                    continue;
+                getDtsDeclarationVariable(lines, entry.members[i], level + 1);
+            }
+            lines.push(addTabs(level) + "}");
+        }
+    }
     function getDtsClassExtend(curClass) {
         if (!curClass.baseType || !dtsDeclarations[curClass.baseType])
             return "";
@@ -522,9 +589,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!entry.members)
             return;
         for (var i = 0; i < entry.members.length; i++) {
-            var member = entry.members[i];
-            if (i > 0 && member.name === entry.members[i - 1].name)
+            if (isDtsPrevMemberTheSame(entry, i))
                 continue;
+            var member = entry.members[i];
             if (hasDtsMemberInBaseClasses(entry, member.name))
                 continue;
             getDtsDeclarationMember(lines, member);
@@ -533,12 +600,13 @@ function generateDocumentation(fileNames, options, docOptions) {
     function getDtsDeclarationMember(lines, member) {
         if (member.pmeType === "function" || member.pmeType === "method") {
             var returnType = getDtsType(member.returnType);
-            lines.push(addTabs() + member.name + "(" + "): " + returnType + ";");
+            var parameters = getDtsParameters(member);
+            lines.push(addTabs() + member.name + "(" + parameters + "): " + returnType + ";");
         }
         if (member.pmeType === "property") {
             var propType = getDtsType(member.type);
             if (member.isField) {
-                lines.push(addTabs() + member.name + "(): " + propType + ";");
+                lines.push(addTabs() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");
             }
             else {
                 lines.push(addTabs() + "get " + member.name + "(): " + propType + ";");
@@ -561,7 +629,23 @@ function generateDocumentation(fileNames, options, docOptions) {
             return type;
         return "any";
     }
+    function isDtsPrevMemberTheSame(entry, index) {
+        return index > 0 && entry.members[index].name === entry.members[index - 1].name;
+    }
+    function getDtsParameters(member) {
+        if (!Array.isArray(member.parameters))
+            return "";
+        var strs = [];
+        var params = member.parameters;
+        for (var i = 0; i < params.length; i++) {
+            var p = params[i];
+            strs.push(p.name + (p.isOptional ? "?" : "") + ": " + getDtsType(p.type));
+        }
+        return strs.join(", ");
+    }
     function hasDtsMemberInBaseClasses(entry, name) {
+        if (!Array.isArray(entry.allTypes))
+            return false;
         for (var i = 1; i < entry.allTypes.length; i++) {
             if (hasDtsMember(dtsDeclarations[entry.allTypes[i]], name))
                 return true;
@@ -577,8 +661,12 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
         return false;
     }
-    function addTabs() {
-        return "\t\t";
+    function addTabs(level) {
+        if (level === void 0) { level = 1; }
+        var str = "";
+        for (var i = 0; i < level; i++)
+            str += "\t\t";
+        return str;
     }
 }
 exports.generateDocumentation = generateDocumentation;

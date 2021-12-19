@@ -1,6 +1,6 @@
 import * as ts from "typescript";
 import * as fs from "fs";
-enum DocEntryType {unknown, classType, interfaceType, functionType};
+enum DocEntryType {unknown, classType, interfaceType, functionType, variableType};
 interface DocEntry {
   name?: string;
   entryType?: DocEntryType;
@@ -19,6 +19,7 @@ interface DocEntry {
   pmeType?: string;
   hasSet?: boolean;
   isField?: boolean;
+  isOptional?: boolean;
   jsonClassName?: string;
   isSerialized?: boolean;
   defaultValue?: any;
@@ -97,21 +98,21 @@ export function generateDocumentation(
   /** set allParentTypes */
   function setAllParentTypes(className: string) {
     if (!className) return;
-    var curClass = classesHash[className];
-    if (curClass.allTypes && curClass.allTypes.length > 0) return;
-    setAllParentTypesCore(curClass);
+    var cur = classesHash[className];
+    if (cur.allTypes && cur.allTypes.length > 0) return;
+    setAllParentTypesCore(cur);
   }
-  function setAllParentTypesCore(curClass: any) {
-    curClass.allTypes = [];
-    curClass.allTypes.push(curClass.name);
-    if (!curClass.baseType) return;
-    var baseClass = classesHash[curClass.baseType];
+  function setAllParentTypesCore(cur: any) {
+    cur.allTypes = [];
+    cur.allTypes.push(cur.name);
+    if (!cur.baseType) return;
+    var baseClass = classesHash[cur.baseType];
     if (!baseClass) return;
     if (!baseClass.allTypes) {
       setAllParentTypesCore(baseClass);
     }
     for (var i = 0; i < baseClass.allTypes.length; i++) {
-      curClass.allTypes.push(baseClass.allTypes[i]);
+      cur.allTypes.push(baseClass.allTypes[i]);
     }
   }
   /** visit nodes finding exported classes */
@@ -119,8 +120,18 @@ export function generateDocumentation(
   function visit(node: ts.Node) {
     // Only consider exported nodes
     if (!isNodeExported(node)) return;
-
-    if (node.kind === ts.SyntaxKind.ClassDeclaration) {
+    if (node.kind === ts.SyntaxKind.VariableStatement) {
+      const vsNode = <ts.VariableStatement>node;
+      if(vsNode.declarationList.declarations.length > 0) {
+        const varNode = vsNode.declarationList.declarations[0];
+        let symbol = checker.getSymbolAtLocation(
+          (<ts.VariableDeclaration>varNode).name
+        );
+        if (isSymbolHasComments(symbol)) {
+          visitVariableNode(varNode, symbol);
+        }
+      }
+    } else if (node.kind === ts.SyntaxKind.ClassDeclaration) {
       // This is a top level class, get its symbol
       let symbol = checker.getSymbolAtLocation(
         (<ts.ClassDeclaration>node).name
@@ -139,6 +150,31 @@ export function generateDocumentation(
     } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
       // This is a namespace, visit its children
       ts.forEachChild(node, visit);
+    }
+  }
+  function visitVariableNode(node: ts.VariableDeclaration, symbol: ts.Symbol) {
+    const entry = serializeSymbol(symbol);
+    entry.entryType = DocEntryType.variableType;
+    dtsDeclarations[entry.name] = entry;
+    visitVariableProperties(entry, node);
+  }
+  function visitVariableProperties(entry: DocEntry, node: ts.VariableDeclaration) {
+    if(!node.initializer) return;
+    const children = (<any>node.initializer).properties;
+    if(!Array.isArray(children)) return;
+    for(var i = 0; i < children.length; i ++) {
+      visitVariableMember(entry, children[i]);
+    }
+  }
+  function visitVariableMember(entry: DocEntry, node: ts.Node) {
+    let symbol = checker.getSymbolAtLocation(
+      (<ts.ClassDeclaration>node).name
+    );
+    const memberEntry = serializeClass(symbol, node);
+    if(memberEntry) {
+      if(!entry.members) entry.members = [];
+      entry.members.push(memberEntry);
+      visitVariableProperties(memberEntry, <ts.VariableDeclaration>node);
     }
   }
   function visitDocumentedNode(node: ts.Node, symbol: ts.Symbol) {
@@ -204,6 +240,7 @@ export function generateDocumentation(
       ser.pmeType = getPMEType(node.kind);
       if(node.kind === ts.SyntaxKind.PropertySignature) {
         ser.isField = true;
+        ser.isOptional = checker.isOptionalParameter(<any>node);
       }
       if (ser.type.indexOf("Event") === 0) ser.pmeType = "event";
       if (node.kind === ts.SyntaxKind.GetAccessor) {
@@ -331,13 +368,21 @@ export function generateDocumentation(
 
   /** Serialize a signature (call or construct) */
   function serializeSignature(signature: ts.Signature) {
-    return {
-      parameters: signature.parameters.map(serializeSymbol),
+    const params = signature.parameters;
+    const res = {
+      parameters: params.map(serializeSymbol),
       returnType: checker.typeToString(signature.getReturnType()),
       documentation: ts.displayPartsToString(
         signature.getDocumentationComment()
       ),
     };
+    for(var i = 0; i < params.length; i ++) {
+      const node: any = params[i].valueDeclaration;
+      if(!!node) {
+        res.parameters[i].isOptional = checker.isOptionalParameter(node);
+      }
+    }
+    return res;
   }
 
   /** True if this is visible outside this file, false otherwise */
@@ -368,32 +413,32 @@ export function generateDocumentation(
     }
     if (!!generateJSONDefinitionClasses[className]) return;
     generateJSONDefinitionClasses[className] = true;
-    var curClass = classesHash[className];
-    if (!isRoot && (!curClass || !hasSerializedProperties(className))) {
+    var cur = classesHash[className];
+    if (!isRoot && (!cur || !hasSerializedProperties(className))) {
       addChildrenClasses(className);
       return;
     }
-    if (!curClass || (!isRoot && hasClassInJSONDefinition(className))) return;
+    if (!cur || (!isRoot && hasClassInJSONDefinition(className))) return;
     var root = outputDefinition;
     if (!isRoot) {
       if (!outputDefinition["definitions"]) {
         outputDefinition["definitions"] = {};
       }
-      outputDefinition["definitions"][curClass.jsonName] = {};
-      root = outputDefinition["definitions"][curClass.jsonName];
-      root["$id"] = "#" + curClass.jsonName;
+      outputDefinition["definitions"][cur.jsonName] = {};
+      root = outputDefinition["definitions"][cur.jsonName];
+      root["$id"] = "#" + cur.jsonName;
     }
     root["type"] = "object";
-    addPropertiesIntoJSONDefinion(curClass, root);
+    addPropertiesIntoJSONDefinion(cur, root);
     if (!isRoot) {
-      addParentClass(curClass, root);
-      addChildrenClasses(curClass.name);
+      addParentClass(cur, root);
+      addChildrenClasses(cur.name);
     }
   }
-  function addParentClass(curClass: DocEntry, root: any) {
-    if (!curClass.baseType) return;
-    addClassIntoJSONDefinition(curClass.baseType);
-    var parentClass = classesHash[curClass.baseType];
+  function addParentClass(cur: DocEntry, root: any) {
+    if (!cur.baseType) return;
+    addClassIntoJSONDefinition(cur.baseType);
+    var parentClass = classesHash[cur.baseType];
     if (!!parentClass && hasClassInJSONDefinition(parentClass.jsonName)) {
       var properties = root["properties"];
       delete root["properties"];
@@ -417,10 +462,10 @@ export function generateDocumentation(
       !!outputDefinition["definitions"][className]
     );
   }
-  function addPropertiesIntoJSONDefinion(curClass: any, jsonDef: any) {
+  function addPropertiesIntoJSONDefinion(cur: any, jsonDef: any) {
     for (var i = 0; i < outputPMEs.length; i++) {
       var property = outputPMEs[i];
-      if (property.className !== curClass.name || !property.isSerialized)
+      if (property.className !== cur.name || !property.isSerialized)
         continue;
       addPropertyIntoJSONDefinion(property, jsonDef);
     }
@@ -515,6 +560,7 @@ export function generateDocumentation(
   function getDtsDeclarations(lines: string[]) {
     const classes = [];
     const interfaces = [];
+    const variables = [];
 
     for(var key in dtsDeclarations) {
       const cur = dtsDeclarations[key];
@@ -524,7 +570,10 @@ export function generateDocumentation(
       if (cur.entryType === DocEntryType.interfaceType) {
           interfaces.push(cur);
       }
+      if (cur.entryType === DocEntryType.variableType) {
+        variables.push(cur);
     }
+  }
     classes.sort((a: DocEntry, b: DocEntry) : number => {
       if(a.allTypes.indexOf(b.name) > -1) return 1;
       if(b.allTypes.indexOf(a.name) > -1) return -1;
@@ -539,6 +588,9 @@ export function generateDocumentation(
     for(var i = 0; i < classes.length; i ++) {
       getDtsDeclarationClass(lines, classes[i]);
     }
+    for(var i = 0; i < variables.length; i ++) {
+      getDtsDeclarationVariable(lines, variables[i], 0);
+    }
   }
   function getDtsDeclarationClass(lines: string[], entry: DocEntry) {
     let line = "export declare ";
@@ -547,11 +599,24 @@ export function generateDocumentation(
     getDtsDeclarationBody(lines, entry);
     lines.push("}");
   }
-  function getDtsDeclarationInterface(lines, entry) {
+  function getDtsDeclarationInterface(lines: string[], entry: DocEntry) {
     var line = "export interface " + entry.name + " {";
     lines.push(line);
     getDtsDeclarationBody(lines, entry);
     lines.push("}");
+  }
+  function getDtsDeclarationVariable(lines: string[], entry: DocEntry, level: number) {
+    var line = (level === 0 ? "export declare var " : addTabs(level)) + entry.name + ": ";
+    const hasMembers = Array.isArray(entry.members);
+    line += hasMembers ? "{" : (getDtsType(entry.type) + ";");
+    lines.push(line);
+    if(hasMembers) {
+        for(var i = 0; i < entry.members.length; i ++) {
+          if(isDtsPrevMemberTheSame(entry, i)) continue;
+          getDtsDeclarationVariable(lines, entry.members[i], level + 1);
+        }
+        lines.push(addTabs(level) + "}")
+    }
   }
   function getDtsClassExtend(curClass: DocEntry): string {
     if(!curClass.baseType || !dtsDeclarations[curClass.baseType]) return "";
@@ -560,8 +625,8 @@ export function generateDocumentation(
   function getDtsDeclarationBody(lines: string[], entry: DocEntry) {
     if(!entry.members) return;
     for(var i = 0; i < entry.members.length; i ++) {
+      if(isDtsPrevMemberTheSame(entry, i)) continue;
       const member = entry.members[i];
-      if(i > 0 && member.name === entry.members[i - 1].name) continue;
       if(hasDtsMemberInBaseClasses(entry, member.name)) continue;
       getDtsDeclarationMember(lines, member);
     }
@@ -569,12 +634,13 @@ export function generateDocumentation(
   function getDtsDeclarationMember(lines: string[], member: DocEntry) {
     if(member.pmeType === "function" || member.pmeType === "method") {
       const returnType = getDtsType(member.returnType);
-      lines.push(addTabs() + member.name + "(" + "): " + returnType + ";");
+      const parameters = getDtsParameters(member);
+      lines.push(addTabs() + member.name + "(" + parameters + "): " + returnType + ";");
     }
     if(member.pmeType === "property") {
       const propType = getDtsType(member.type);
       if(member.isField) {
-        lines.push(addTabs() + member.name + "(): " + propType + ";");  
+        lines.push(addTabs() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
       } else {
         lines.push(addTabs() + "get " + member.name + "(): " + propType + ";");
         if(member.hasSet) {
@@ -594,7 +660,21 @@ export function generateDocumentation(
     if(dtsDeclarations[str]) return type;
     return "any"
   }
+  function isDtsPrevMemberTheSame(entry: DocEntry, index: number): boolean {
+    return index > 0 && entry.members[index].name === entry.members[index - 1].name;
+  }
+  function getDtsParameters(member: DocEntry): string {
+    if(!Array.isArray(member.parameters)) return "";
+    let strs  = [];
+    const params = member.parameters;
+    for(var i = 0; i < params.length; i ++) {
+      const p = params[i];
+      strs.push(p.name + (p.isOptional ? "?" : "") + ": " + getDtsType(p.type));
+    }
+    return strs.join(", ");
+  }
   function hasDtsMemberInBaseClasses(entry: DocEntry, name: string): boolean {
+    if(!Array.isArray(entry.allTypes)) return false;
     for(var i = 1; i < entry.allTypes.length; i ++) {
       if(hasDtsMember(dtsDeclarations[entry.allTypes[i]], name)) return true;
     }
@@ -607,7 +687,9 @@ export function generateDocumentation(
     }
     return false;
   }
-  function addTabs(): string {
-    return "\t\t";
+  function addTabs(level: number = 1): string {
+    let str = "";
+    for(var i = 0; i < level; i++) str+= "\t\t";
+    return str;
   }
 }
