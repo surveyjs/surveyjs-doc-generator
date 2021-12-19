@@ -593,6 +593,7 @@ export function generateDocumentation(
     }
   }
   function getDtsDeclarationClass(lines: string[], entry: DocEntry) {
+    getDtsDoc(lines, entry);
     let line = "export declare ";
     line += "class " + entry.name + getDtsClassExtend(entry) + " {";
     lines.push(line);
@@ -600,13 +601,15 @@ export function generateDocumentation(
     lines.push("}");
   }
   function getDtsDeclarationInterface(lines: string[], entry: DocEntry) {
+    getDtsDoc(lines, entry);
     var line = "export interface " + entry.name + " {";
     lines.push(line);
     getDtsDeclarationBody(lines, entry);
     lines.push("}");
   }
   function getDtsDeclarationVariable(lines: string[], entry: DocEntry, level: number) {
-    var line = (level === 0 ? "export declare var " : addTabs(level)) + entry.name + ": ";
+    getDtsDoc(lines, entry, level);
+    var line = (level === 0 ? "export declare var " : addDtsTabs(level)) + entry.name + ": ";
     const hasMembers = Array.isArray(entry.members);
     line += hasMembers ? "{" : (getDtsType(entry.type) + ";");
     lines.push(line);
@@ -615,12 +618,12 @@ export function generateDocumentation(
           if(isDtsPrevMemberTheSame(entry, i)) continue;
           getDtsDeclarationVariable(lines, entry.members[i], level + 1);
         }
-        lines.push(addTabs(level) + "}")
+        lines.push(addDtsTabs(level) + "}")
     }
   }
-  function getDtsClassExtend(curClass: DocEntry): string {
-    if(!curClass.baseType || !dtsDeclarations[curClass.baseType]) return "";
-    return  " extends " + curClass.baseType;
+  function getDtsClassExtend(cur: DocEntry): string {
+    if(!cur.baseType || !dtsDeclarations[cur.baseType]) return "";
+    return  " extends " + cur.baseType;
   }
   function getDtsDeclarationBody(lines: string[], entry: DocEntry) {
     if(!entry.members) return;
@@ -633,21 +636,32 @@ export function generateDocumentation(
   }
   function getDtsDeclarationMember(lines: string[], member: DocEntry) {
     if(member.pmeType === "function" || member.pmeType === "method") {
+      getDtsDoc(lines, member, 1);
       const returnType = getDtsType(member.returnType);
       const parameters = getDtsParameters(member);
-      lines.push(addTabs() + member.name + "(" + parameters + "): " + returnType + ";");
+      lines.push(addDtsTabs() + member.name + "(" + parameters + "): " + returnType + ";");
     }
     if(member.pmeType === "property") {
+      getDtsDoc(lines, member, 1);
       const propType = getDtsType(member.type);
       if(member.isField) {
-        lines.push(addTabs() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
+        lines.push(addDtsTabs() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
       } else {
-        lines.push(addTabs() + "get " + member.name + "(): " + propType + ";");
+        lines.push(addDtsTabs() + "get " + member.name + "(): " + propType + ";");
         if(member.hasSet) {
-          lines.push(addTabs() + "set " + member.name + "(val: " + propType + ");");
+          lines.push(addDtsTabs() + "set " + member.name + "(val: " + propType + ");");
         }
       }
     }
+  }
+  function getDtsDoc(lines: string[], entry: DocEntry, level: number = 0) {
+    if(!entry.documentation) return;
+    const docLines = entry.documentation.split("\n");
+    lines.push(addDtsTabs(level) + "/*");
+    for(var i = 0; i < docLines.length; i ++) {
+      lines.push(addDtsTabs(level) + "* " + docLines[i]);
+    }
+    lines.push(addDtsTabs(level) + "*/");
   }
   function getDtsType(type: string): string {
     if(!type) return "void";
@@ -687,7 +701,7 @@ export function generateDocumentation(
     }
     return false;
   }
-  function addTabs(level: number = 1): string {
+  function addDtsTabs(level: number = 1): string {
     let str = "";
     for(var i = 0; i < level; i++) str+= "\t\t";
     return str;

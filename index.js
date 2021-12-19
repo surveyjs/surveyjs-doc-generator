@@ -554,6 +554,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function getDtsDeclarationClass(lines, entry) {
+        getDtsDoc(lines, entry);
         var line = "export declare ";
         line += "class " + entry.name + getDtsClassExtend(entry) + " {";
         lines.push(line);
@@ -561,13 +562,15 @@ function generateDocumentation(fileNames, options, docOptions) {
         lines.push("}");
     }
     function getDtsDeclarationInterface(lines, entry) {
+        getDtsDoc(lines, entry);
         var line = "export interface " + entry.name + " {";
         lines.push(line);
         getDtsDeclarationBody(lines, entry);
         lines.push("}");
     }
     function getDtsDeclarationVariable(lines, entry, level) {
-        var line = (level === 0 ? "export declare var " : addTabs(level)) + entry.name + ": ";
+        getDtsDoc(lines, entry, level);
+        var line = (level === 0 ? "export declare var " : addDtsTabs(level)) + entry.name + ": ";
         var hasMembers = Array.isArray(entry.members);
         line += hasMembers ? "{" : (getDtsType(entry.type) + ";");
         lines.push(line);
@@ -577,13 +580,13 @@ function generateDocumentation(fileNames, options, docOptions) {
                     continue;
                 getDtsDeclarationVariable(lines, entry.members[i], level + 1);
             }
-            lines.push(addTabs(level) + "}");
+            lines.push(addDtsTabs(level) + "}");
         }
     }
-    function getDtsClassExtend(curClass) {
-        if (!curClass.baseType || !dtsDeclarations[curClass.baseType])
+    function getDtsClassExtend(cur) {
+        if (!cur.baseType || !dtsDeclarations[cur.baseType])
             return "";
-        return " extends " + curClass.baseType;
+        return " extends " + cur.baseType;
     }
     function getDtsDeclarationBody(lines, entry) {
         if (!entry.members)
@@ -599,22 +602,35 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
     function getDtsDeclarationMember(lines, member) {
         if (member.pmeType === "function" || member.pmeType === "method") {
+            getDtsDoc(lines, member, 1);
             var returnType = getDtsType(member.returnType);
             var parameters = getDtsParameters(member);
-            lines.push(addTabs() + member.name + "(" + parameters + "): " + returnType + ";");
+            lines.push(addDtsTabs() + member.name + "(" + parameters + "): " + returnType + ";");
         }
         if (member.pmeType === "property") {
+            getDtsDoc(lines, member, 1);
             var propType = getDtsType(member.type);
             if (member.isField) {
-                lines.push(addTabs() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");
+                lines.push(addDtsTabs() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");
             }
             else {
-                lines.push(addTabs() + "get " + member.name + "(): " + propType + ";");
+                lines.push(addDtsTabs() + "get " + member.name + "(): " + propType + ";");
                 if (member.hasSet) {
-                    lines.push(addTabs() + "set " + member.name + "(val: " + propType + ");");
+                    lines.push(addDtsTabs() + "set " + member.name + "(val: " + propType + ");");
                 }
             }
         }
+    }
+    function getDtsDoc(lines, entry, level) {
+        if (level === void 0) { level = 0; }
+        if (!entry.documentation)
+            return;
+        var docLines = entry.documentation.split("\n");
+        lines.push(addDtsTabs(level) + "/*");
+        for (var i = 0; i < docLines.length; i++) {
+            lines.push(addDtsTabs(level) + "* " + docLines[i]);
+        }
+        lines.push(addDtsTabs(level) + "*/");
     }
     function getDtsType(type) {
         if (!type)
@@ -661,7 +677,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
         return false;
     }
-    function addTabs(level) {
+    function addDtsTabs(level) {
         if (level === void 0) { level = 1; }
         var str = "";
         for (var i = 0; i < level; i++)
