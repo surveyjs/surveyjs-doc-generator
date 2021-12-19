@@ -10,5 +10,5 @@ doc.generateDocumentation(
     target: ts.ScriptTarget.ES5,
     module: ts.ModuleKind.CommonJS
   },
-  { generateJSONDefinition: true }
+  { generateDoc: false, generateJSONDefinition: false, dtsFileName: "test.d.ts" }
 );

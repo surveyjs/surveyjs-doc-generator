@@ -1,7 +1,9 @@
 import * as ts from "typescript";
 import * as fs from "fs";
+enum DocEntryType {unknown, classType, interfaceType, functionType};
 interface DocEntry {
   name?: string;
+  entryType?: DocEntryType;
   className?: string;
   jsonName?: string;
   fileName?: string;
@@ -11,10 +13,12 @@ interface DocEntry {
   baseType?: string;
   allTypes?: string[];
   constructors?: DocEntry[];
+  members?: DocEntry[];
   parameters?: DocEntry[];
   returnType?: string;
   pmeType?: string;
   hasSet?: boolean;
+  isField?: boolean;
   jsonClassName?: string;
   isSerialized?: boolean;
   defaultValue?: any;
@@ -46,8 +50,13 @@ export function generateDocumentation(
   let curJsonName: string = null;
   let generateJSONDefinitionClasses = {};
   let generateJSONDefinition =
-    !!docOptions && docOptions.generateJSONDefinition == true;
+    !!docOptions && docOptions.generateJSONDefinition === true;
+  let generateDocs = !docOptions || (!!docOptions && docOptions.generateDoc !== false);
+  let dtsFileName = !!docOptions ? docOptions.dtsFileName : undefined;
+  let generateDts = !!dtsFileName;
   let outputDefinition = {};
+  let dtsImports = {};
+  let dtsDeclarations = {};
 
   // Visit every sourceFile in the program
   for (const sourceFile of program.getSourceFiles()) {
@@ -58,16 +67,18 @@ export function generateDocumentation(
   for (var key in classesHash) {
     setAllParentTypes(key);
   }
-  // print out the doc
-  fs.writeFileSync(
-    process.cwd() + "/docs/classes.json",
-    JSON.stringify(outputClasses, undefined, 4)
-  );
-  fs.writeFileSync(
-    process.cwd() + "/docs/pmes.json",
-    JSON.stringify(outputPMEs, undefined, 4)
-  );
-  if (!!generateJSONDefinition) {
+  if(generateDocs) {
+    // print out the doc
+    fs.writeFileSync(
+      process.cwd() + "/docs/classes.json",
+      JSON.stringify(outputClasses, undefined, 4)
+    );
+    fs.writeFileSync(
+      process.cwd() + "/docs/pmes.json",
+      JSON.stringify(outputPMEs, undefined, 4)
+    );
+  }
+  if (generateJSONDefinition) {
     outputDefinition["$schema"] = "http://json-schema.org/draft-07/schema#";
     outputDefinition["title"] = "SurveyJS Library json schema";
     addClassIntoJSONDefinition("SurveyModel", true);
@@ -76,6 +87,10 @@ export function generateDocumentation(
       JSON.stringify(outputDefinition, undefined, 4)
     );
   }
+  if(generateDts) {
+    prepareDtsInfo();
+    fs.writeFileSync(process.cwd() + "\\" + dtsFileName, getDtsText());
+}
 
   return;
 
@@ -183,8 +198,13 @@ export function generateDocumentation(
         ser.className = curClass.name;
         ser.jsonName = curClass.jsonName;
         fullName = curClass.name + "." + fullName;
+        if(!curClass.members) curClass.members = [];
+        curClass.members.push(ser);
       }
       ser.pmeType = getPMEType(node.kind);
+      if(node.kind === ts.SyntaxKind.PropertySignature) {
+        ser.isField = true;
+      }
       if (ser.type.indexOf("Event") === 0) ser.pmeType = "event";
       if (node.kind === ts.SyntaxKind.GetAccessor) {
         let serSet = pmesHash[fullName];
@@ -255,16 +275,19 @@ export function generateDocumentation(
     return res;
   }
 
-  /** Serialize a class symbol infomration */
+  /** Serialize a class symbol information */
   function serializeClass(symbol: ts.Symbol, node: ts.Node) {
     let details = serializeSymbol(symbol);
-
+    if(node.kind === ts.SyntaxKind.InterfaceDeclaration) {
+      details.entryType = DocEntryType.interfaceType;
+    }
     if (node.kind !== ts.SyntaxKind.ClassDeclaration) return details;
     // Get the construct signatures
     let constructorType = checker.getTypeOfSymbolAtLocation(
       symbol,
       symbol.valueDeclaration
     );
+    details.entryType = DocEntryType.classType;
     details.constructors = constructorType
       .getConstructSignatures()
       .map(serializeSignature);
@@ -301,9 +324,7 @@ export function generateDocumentation(
       );
       let funDetails = serializeSignature(signature);
       details.parameters = funDetails.parameters;
-      if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
-        details.returnType = funDetails.returnType;
-      }
+      details.returnType = funDetails.returnType;
     }
     return details;
   }
@@ -469,5 +490,124 @@ export function generateDocumentation(
     var curClass = classesHash[type];
     if (!curClass) return type;
     return { $href: "#" + curClass.jsonName };
+  }
+  function prepareDtsInfo() {
+    for(var key in classesHash) {
+      proccessDtsClass(classesHash[key]);
+    }
+  }
+  function proccessDtsClass(curClass: DocEntry) {
+    dtsDeclarations[curClass.name] = curClass;
+    proccessDtsClassMembers(curClass);
+  }
+  function proccessDtsClassMembers(curClass: DocEntry) {
+
+  }
+  function getDtsText(): string {
+    const lines = [];
+    getDtsImports(lines);
+    getDtsDeclarations(lines);
+    return lines.join("\n");
+  }
+  function getDtsImports(lines: string[]) {
+
+  }
+  function getDtsDeclarations(lines: string[]) {
+    const classes = [];
+    const interfaces = [];
+
+    for(var key in dtsDeclarations) {
+      const cur = dtsDeclarations[key];
+      if (cur.entryType === DocEntryType.classType) {
+          classes.push(cur);
+      }
+      if (cur.entryType === DocEntryType.interfaceType) {
+          interfaces.push(cur);
+      }
+    }
+    classes.sort((a: DocEntry, b: DocEntry) : number => {
+      if(a.allTypes.indexOf(b.name) > -1) return 1;
+      if(b.allTypes.indexOf(a.name) > -1) return -1;
+      if(a.allTypes.length !== b.allTypes.length) {
+        return a.allTypes.length > b.allTypes.length ? 1 : -1;
+      }
+      return  a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
+    for (var i = 0; i < interfaces.length; i++) {
+      getDtsDeclarationInterface(lines, interfaces[i]);
+    }
+    for(var i = 0; i < classes.length; i ++) {
+      getDtsDeclarationClass(lines, classes[i]);
+    }
+  }
+  function getDtsDeclarationClass(lines: string[], entry: DocEntry) {
+    let line = "export declare ";
+    line += "class " + entry.name + getDtsClassExtend(entry) + " {";
+    lines.push(line);
+    getDtsDeclarationBody(lines, entry);
+    lines.push("}");
+  }
+  function getDtsDeclarationInterface(lines, entry) {
+    var line = "export interface " + entry.name + " {";
+    lines.push(line);
+    getDtsDeclarationBody(lines, entry);
+    lines.push("}");
+  }
+  function getDtsClassExtend(curClass: DocEntry): string {
+    if(!curClass.baseType || !dtsDeclarations[curClass.baseType]) return "";
+    return  " extends " + curClass.baseType;
+  }
+  function getDtsDeclarationBody(lines: string[], entry: DocEntry) {
+    if(!entry.members) return;
+    for(var i = 0; i < entry.members.length; i ++) {
+      const member = entry.members[i];
+      if(i > 0 && member.name === entry.members[i - 1].name) continue;
+      if(hasDtsMemberInBaseClasses(entry, member.name)) continue;
+      getDtsDeclarationMember(lines, member);
+    }
+  }
+  function getDtsDeclarationMember(lines: string[], member: DocEntry) {
+    if(member.pmeType === "function" || member.pmeType === "method") {
+      const returnType = getDtsType(member.returnType);
+      lines.push(addTabs() + member.name + "(" + "): " + returnType + ";");
+    }
+    if(member.pmeType === "property") {
+      const propType = getDtsType(member.type);
+      if(member.isField) {
+        lines.push(addTabs() + member.name + "(): " + propType + ";");  
+      } else {
+        lines.push(addTabs() + "get " + member.name + "(): " + propType + ";");
+        if(member.hasSet) {
+          lines.push(addTabs() + "set " + member.name + "(val: " + propType + ");");
+        }
+      }
+    }
+  }
+  function getDtsType(type: string): string {
+    if(!type) return "void";
+    if(type.indexOf("|") > -1) {
+
+      return type.indexOf("(") > -1 ? "any" : type;
+    }
+    let str = type.replace("[", "").replace("]", "");
+    if(str === "number" || str === "boolean" || str === "string" || str === "any" || str === "void") return type;
+    if(dtsDeclarations[str]) return type;
+    return "any"
+  }
+  function hasDtsMemberInBaseClasses(entry: DocEntry, name: string): boolean {
+    for(var i = 1; i < entry.allTypes.length; i ++) {
+      if(hasDtsMember(dtsDeclarations[entry.allTypes[i]], name)) return true;
+    }
+    return false;
+  }
+  function hasDtsMember(entry: DocEntry, name: string): boolean {
+    if(!entry.members) return false;
+    for(var i = 0; i < entry.members.length; i ++) {
+      if(entry.members[i].name === name) return true;
+    }
+    return false;
+  }
+  function addTabs(): string {
+    return "\t\t";
   }
 }
