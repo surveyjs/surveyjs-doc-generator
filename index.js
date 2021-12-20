@@ -31,10 +31,10 @@ function generateDocumentation(fileNames, options, docOptions) {
     var curClass = null;
     var curJsonName = null;
     var generateJSONDefinitionClasses = {};
-    var generateJSONDefinition = !!docOptions && docOptions.generateJSONDefinition === true;
-    var generateDocs = !docOptions || (!!docOptions && docOptions.generateDoc !== false);
     var dtsFileName = !!docOptions ? docOptions.dtsFileName : undefined;
     var generateDts = !!dtsFileName;
+    var generateJSONDefinition = !!docOptions && docOptions.generateJSONDefinition === true;
+    var generateDocs = !docOptions && !generateDts || (!!docOptions && docOptions.generateDoc !== false);
     var outputDefinition = {};
     var dtsImports = {};
     var dtsDeclarations = {};
@@ -99,7 +99,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (vsNode.declarationList.declarations.length > 0) {
                 var varNode = vsNode.declarationList.declarations[0];
                 var symbol = checker.getSymbolAtLocation(varNode.name);
-                if (isSymbolHasComments(symbol)) {
+                if (generateDts || isSymbolHasComments(symbol)) {
                     visitVariableNode(varNode, symbol);
                 }
             }
@@ -107,14 +107,14 @@ function generateDocumentation(fileNames, options, docOptions) {
         else if (node.kind === ts.SyntaxKind.ClassDeclaration) {
             // This is a top level class, get its symbol
             var symbol = checker.getSymbolAtLocation(node.name);
-            if (isSymbolHasComments(symbol)) {
+            if (generateDts || isSymbolHasComments(symbol)) {
                 visitDocumentedNode(node, symbol);
             }
         }
         else if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
             // This is a top level class, get its symbol
             var symbol = checker.getSymbolAtLocation(node.name);
-            if (isSymbolHasComments(symbol)) {
+            if (generateDts || isSymbolHasComments(symbol)) {
                 visitDocumentedNode(node, symbol);
             }
         }
@@ -269,9 +269,10 @@ function generateDocumentation(fileNames, options, docOptions) {
     /** Serialize a symbol into a json object */
     function serializeSymbol(symbol) {
         var type = getTypeOfSymbol(symbol);
+        var docParts = symbol.getDocumentationComment();
         var res = {
             name: symbol.getName(),
-            documentation: ts.displayPartsToString(symbol.getDocumentationComment()),
+            documentation: !!docParts ? ts.displayPartsToString(docParts) : "",
             type: checker.typeToString(type)
         };
         var jsTags = symbol.getJsDocTags();
@@ -311,7 +312,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             var firstHeritageClause = classDeclaration.heritageClauses[0];
             var firstHeritageClauseType = firstHeritageClause.types[0];
             var extendsType = checker.getTypeAtLocation(firstHeritageClauseType.expression);
-            if (extendsType) {
+            if (extendsType && extendsType.symbol) {
                 details.baseType = extendsType.symbol.name;
             }
         }
@@ -576,7 +577,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         lines.push(line);
         if (hasMembers) {
             for (var i = 0; i < entry.members.length; i++) {
-                if (isDtsPrevMemberTheSame(entry, i))
+                if (isDtsPrevMemberTheSame(entry.members, i))
                     continue;
                 getDtsDeclarationVariable(lines, entry.members[i], level + 1);
             }
@@ -584,17 +585,24 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function getDtsClassExtend(cur) {
-        if (!cur.baseType || !dtsDeclarations[cur.baseType])
+        if (!cur.baseType)
             return "";
+        var entry = dtsDeclarations[cur.baseType];
+        if (!entry)
+            return "";
+        if (entry.entryType === DocEntryType.interfaceType)
+            return Array.isArray(cur.members) ? " implements " + cur.baseType : "";
         return " extends " + cur.baseType;
     }
     function getDtsDeclarationBody(lines, entry) {
-        if (!entry.members)
+        if (!Array.isArray(entry.members))
             return;
-        for (var i = 0; i < entry.members.length; i++) {
-            if (isDtsPrevMemberTheSame(entry, i))
+        var members = [].concat(entry.members);
+        addDtsMissingMembersInClassFromInterface(entry, members);
+        for (var i = 0; i < members.length; i++) {
+            if (isDtsPrevMemberTheSame(members, i))
                 continue;
-            var member = entry.members[i];
+            var member = members[i];
             if (hasDtsMemberInBaseClasses(entry, member.name))
                 continue;
             getDtsDeclarationMember(lines, member);
@@ -632,6 +640,23 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
         lines.push(addDtsTabs(level) + "*/");
     }
+    function addDtsMissingMembersInClassFromInterface(entry, members) {
+        if (entry.entryType !== DocEntryType.classType || !entry.baseType)
+            return;
+        var parentEntry = dtsDeclarations[entry.baseType];
+        if (!parentEntry || parentEntry.entryType !== DocEntryType.interfaceType || !Array.isArray(parentEntry.members))
+            return;
+        var membersHash = {};
+        for (var i = 0; i < members.length; i++) {
+            membersHash[members[i].name] = members[i];
+        }
+        for (var i = 0; i < parentEntry.members.length; i++) {
+            var member = parentEntry.members[i];
+            if (!membersHash[member.name]) {
+                members.push(member);
+            }
+        }
+    }
     function getDtsType(type) {
         if (!type)
             return "void";
@@ -645,8 +670,8 @@ function generateDocumentation(fileNames, options, docOptions) {
             return type;
         return "any";
     }
-    function isDtsPrevMemberTheSame(entry, index) {
-        return index > 0 && entry.members[index].name === entry.members[index - 1].name;
+    function isDtsPrevMemberTheSame(members, index) {
+        return index > 0 && members[index].name === members[index - 1].name;
     }
     function getDtsParameters(member) {
         if (!Array.isArray(member.parameters))
@@ -663,7 +688,10 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!Array.isArray(entry.allTypes))
             return false;
         for (var i = 1; i < entry.allTypes.length; i++) {
-            if (hasDtsMember(dtsDeclarations[entry.allTypes[i]], name))
+            var parentEntry = dtsDeclarations[entry.allTypes[i]];
+            if (parentEntry.entryType === DocEntryType.interfaceType)
+                continue;
+            if (hasDtsMember(parentEntry, name))
                 return true;
         }
         return false;

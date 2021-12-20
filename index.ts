@@ -50,11 +50,11 @@ export function generateDocumentation(
   let curClass: DocEntry = null;
   let curJsonName: string = null;
   let generateJSONDefinitionClasses = {};
-  let generateJSONDefinition =
-    !!docOptions && docOptions.generateJSONDefinition === true;
-  let generateDocs = !docOptions || (!!docOptions && docOptions.generateDoc !== false);
   let dtsFileName = !!docOptions ? docOptions.dtsFileName : undefined;
   let generateDts = !!dtsFileName;
+  let generateJSONDefinition = 
+    !!docOptions && docOptions.generateJSONDefinition === true;
+  let generateDocs = !docOptions && !generateDts || (!!docOptions && docOptions.generateDoc !== false);
   let outputDefinition = {};
   let dtsImports = {};
   let dtsDeclarations = {};
@@ -91,8 +91,7 @@ export function generateDocumentation(
   if(generateDts) {
     prepareDtsInfo();
     fs.writeFileSync(process.cwd() + "\\" + dtsFileName, getDtsText());
-}
-
+  }
   return;
 
   /** set allParentTypes */
@@ -127,7 +126,7 @@ export function generateDocumentation(
         let symbol = checker.getSymbolAtLocation(
           (<ts.VariableDeclaration>varNode).name
         );
-        if (isSymbolHasComments(symbol)) {
+        if (generateDts || isSymbolHasComments(symbol)) {
           visitVariableNode(varNode, symbol);
         }
       }
@@ -136,7 +135,7 @@ export function generateDocumentation(
       let symbol = checker.getSymbolAtLocation(
         (<ts.ClassDeclaration>node).name
       );
-      if (isSymbolHasComments(symbol)) {
+      if (generateDts || isSymbolHasComments(symbol)) {
         visitDocumentedNode(node, symbol);
       }
     } else if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
@@ -144,7 +143,7 @@ export function generateDocumentation(
       let symbol = checker.getSymbolAtLocation(
         (<ts.InterfaceDeclaration>node).name
       );
-      if (isSymbolHasComments(symbol)) {
+      if (generateDts || isSymbolHasComments(symbol)) {
         visitDocumentedNode(node, symbol);
       }
     } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
@@ -291,10 +290,11 @@ export function generateDocumentation(
   /** Serialize a symbol into a json object */
 
   function serializeSymbol(symbol: ts.Symbol): DocEntry {
-    var type = getTypeOfSymbol(symbol);
-    var res = {
+    const type = getTypeOfSymbol(symbol);
+    const docParts = symbol.getDocumentationComment();
+    const res = {
       name: symbol.getName(),
-      documentation: ts.displayPartsToString(symbol.getDocumentationComment()),
+      documentation: !!docParts ? ts.displayPartsToString(docParts) : "",
       type: checker.typeToString(type),
     };
     var jsTags = symbol.getJsDocTags();
@@ -342,7 +342,7 @@ export function generateDocumentation(
       const extendsType = checker.getTypeAtLocation(
         firstHeritageClauseType.expression
       );
-      if (extendsType) {
+      if (extendsType && extendsType.symbol) {
         details.baseType = extendsType.symbol.name;
       }
     }
@@ -615,21 +615,27 @@ export function generateDocumentation(
     lines.push(line);
     if(hasMembers) {
         for(var i = 0; i < entry.members.length; i ++) {
-          if(isDtsPrevMemberTheSame(entry, i)) continue;
+          if(isDtsPrevMemberTheSame(entry.members, i)) continue;
           getDtsDeclarationVariable(lines, entry.members[i], level + 1);
         }
         lines.push(addDtsTabs(level) + "}")
     }
   }
   function getDtsClassExtend(cur: DocEntry): string {
-    if(!cur.baseType || !dtsDeclarations[cur.baseType]) return "";
+    if(!cur.baseType) return "";
+    const entry: DocEntry = dtsDeclarations[cur.baseType];
+    if(!entry) return "";
+    if(entry.entryType === DocEntryType.interfaceType)
+      return Array.isArray(cur.members) ? " implements " + cur.baseType : "";
     return  " extends " + cur.baseType;
   }
   function getDtsDeclarationBody(lines: string[], entry: DocEntry) {
-    if(!entry.members) return;
-    for(var i = 0; i < entry.members.length; i ++) {
-      if(isDtsPrevMemberTheSame(entry, i)) continue;
-      const member = entry.members[i];
+    if(!Array.isArray(entry.members)) return;
+    const members = [].concat(entry.members);
+    addDtsMissingMembersInClassFromInterface(entry, members);
+    for(var i = 0; i < members.length; i ++) {
+      if(isDtsPrevMemberTheSame(members, i)) continue;
+      const member = members[i];
       if(hasDtsMemberInBaseClasses(entry, member.name)) continue;
       getDtsDeclarationMember(lines, member);
     }
@@ -663,6 +669,21 @@ export function generateDocumentation(
     }
     lines.push(addDtsTabs(level) + "*/");
   }
+  function addDtsMissingMembersInClassFromInterface(entry: DocEntry, members: Array<DocEntry>) {
+    if(entry.entryType !== DocEntryType.classType || !entry.baseType) return;
+    const parentEntry: DocEntry = dtsDeclarations[entry.baseType] ;
+    if(!parentEntry || parentEntry.entryType !== DocEntryType.interfaceType || !Array.isArray(parentEntry.members)) return
+    const membersHash = {};
+    for(var i = 0; i < members.length; i ++) {
+      membersHash[members[i].name] = members[i];
+    }
+    for(var i = 0; i < parentEntry.members.length; i ++) {
+      const member = parentEntry.members[i];
+      if(!membersHash[member.name]) {
+        members.push(member);
+      }
+    }
+  }
   function getDtsType(type: string): string {
     if(!type) return "void";
     if(type.indexOf("|") > -1) {
@@ -674,8 +695,8 @@ export function generateDocumentation(
     if(dtsDeclarations[str]) return type;
     return "any"
   }
-  function isDtsPrevMemberTheSame(entry: DocEntry, index: number): boolean {
-    return index > 0 && entry.members[index].name === entry.members[index - 1].name;
+  function isDtsPrevMemberTheSame(members: Array<DocEntry>, index: number): boolean {
+    return index > 0 && members[index].name === members[index - 1].name;
   }
   function getDtsParameters(member: DocEntry): string {
     if(!Array.isArray(member.parameters)) return "";
@@ -690,7 +711,9 @@ export function generateDocumentation(
   function hasDtsMemberInBaseClasses(entry: DocEntry, name: string): boolean {
     if(!Array.isArray(entry.allTypes)) return false;
     for(var i = 1; i < entry.allTypes.length; i ++) {
-      if(hasDtsMember(dtsDeclarations[entry.allTypes[i]], name)) return true;
+      let parentEntry: DocEntry = dtsDeclarations[entry.allTypes[i]];
+      if(parentEntry.entryType === DocEntryType.interfaceType) continue;
+      if(hasDtsMember(parentEntry, name)) return true;
     }
     return false;
   }
