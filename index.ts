@@ -1,5 +1,7 @@
 import * as ts from "typescript";
 import * as fs from "fs";
+import * as path from "path"
+
 enum DocEntryType {unknown, classType, interfaceType, functionType, variableType};
 interface DocEntry {
   name?: string;
@@ -37,12 +39,22 @@ export function generateDocumentation(
   options: ts.CompilerOptions,
   docOptions: any = null
 ): void {
+  const host = ts.createCompilerHost(options);
   // Build a program using the set of root file names in fileNames
-  let program = ts.createProgram(fileNames, options);
+  const program = ts.createProgram(fileNames, options, host);
 
   // Get the checker, we will use it to find more about classes
   let checker = program.getTypeChecker();
-
+  /*
+  const errors = ts.getPreEmitDiagnostics(program);
+  if(errors.length > 0) {
+      for(var i = 0; i < errors.length; i ++) {
+        const er = errors[i];
+        //console.log(er.messageText + (!!er.file ?  + "  " + er.file.fileName : ""));
+      }
+      //console.log("Errors: " + errors.length);
+  }
+  */
   let outputClasses: DocEntry[] = [];
   let outputPMEs: DocEntry[] = [];
   let pmesHash = {};
@@ -58,6 +70,8 @@ export function generateDocumentation(
   let outputDefinition = {};
   let dtsImports = {};
   let dtsDeclarations = {};
+  let dtsTypesParameters = {};
+  let dtsTypesArgumentParameters = {};
 
   // Visit every sourceFile in the program
   for (const sourceFile of program.getSourceFiles()) {
@@ -114,19 +128,102 @@ export function generateDocumentation(
       cur.allTypes.push(baseClass.allTypes[i]);
     }
   }
-  /** visit nodes finding exported classes */
+/*  
+  function getFileNames(fileNames: Array<string>): Array<string> {
+    const res = [];
+    for(var i = 0; i < fileNames.length; i ++) {
+      res.push(fileNames[i]);
+      res.push(getImportedVarNamesFile(fileNames[i]));
+    }
+    return res;
+  }
+  function getImportedVarNamesFile(fileName: string): string {
+    let text: string = fs.readFileSync(fileName, 'utf8');
+    text = text.replace(/\r/gm, "");
+    text = text.replace(/\/{2}(.*)\n/gm, "");
+    text = text.replace(/(?<!;)\n/gm, "");
+    const lines = text.split("\n");
+    const dir = path.dirname(fileName);
+    const file = path.basename(fileName);
+    const localDir = process.cwd();
+    const imports = [];
+    const importVars = [];
+    for(var i = 0; i < lines.length; i ++) {
+      let str = lines[i];
+      if(str.indexOf("from") < 0) continue;
+      const indexEnd = str.lastIndexOf('"');
+      const indexStart = str.lastIndexOf('"', indexEnd - 1);
+      if(indexStart < indexEnd && indexStart > -1) {
+        let relFileName = str.substring(indexStart + 1, indexEnd - 1);
+        let absFileName = path.join(dir, relFileName);
+        absFileName = absFileName.replace(/\\/g, "\\\\");
+        str = str.replace(relFileName, absFileName).trim();
+        str = str.replace("export {", "import {");
+        imports.push(str);
+        if(str.indexOf("{") > -1) {
+          str.match(/\{(.*)}/g).forEach((val: string) => {
+            const vars = val.replace("{", "").replace("}", "").trim().split(",");
+            for(let j = 0; j < vars.length; j ++) {
+              const name = vars[j].trim();
+              if(!name || name[0] !== name[0].toUpperCase()) continue;
+              importVars.push("var var" + name + " :" + name + ";");
+            }
+          });
+        }
+      }
+    }
+    text = imports.join("\n") + "\n" + importVars.join("\n");
+    const newFileName = path.join(localDir, file);
+    //fs.writeFileSync(newFileName, text);
+    return newFileName;
+  }
+  function getFileNames(fileNames: Array<string>): Array<string> {
+    const files = {};
+    for(var i = 0; i < fileNames.length; i ++) {
+      files[fileNames[i]] = true;
+      const imFiles = getImportedFileNames(fileNames[i]);
+      for(var j = 0; j < imFiles.length; j ++) {
+        files[imFiles[j]] = true;
+      }
+    }
+    const res = [];
+    for(key in files)  res.push(key);
+    return res;
+  }
 
+  function getImportedFileNames(fileName: string): string[] {
+    const text: string = fs.readFileSync(fileName, 'utf8');
+    const lines = text.split("\n");
+    const dir = path.dirname(fileName);
+    const res = [];
+    for(var i = 0; i < lines.length; i ++) {
+      let str = lines[i];
+      if(str.indexOf("from") < 0) continue;
+      const indexEnd = str.lastIndexOf('"');
+      const indexStart = str.lastIndexOf('"', indexEnd - 1);
+      if(indexStart < indexEnd && indexStart > -1) {
+        str = str.substring(indexStart + 1, indexEnd);
+        res.push(path.join(dir, str));
+      }
+    } 
+    return res;
+  }
+*/  
+  /** visit nodes finding exported classes */
   function visit(node: ts.Node) {
     // Only consider exported nodes
     if (!isNodeExported(node)) return;
-    if (node.kind === ts.SyntaxKind.VariableStatement) {
+    if(node.kind === ts.SyntaxKind.ExportDeclaration) {
+      //const eNode: ts.ExportDeclaration = <any>node;
+      //console.log(eNode.name);
+    } else if (node.kind === ts.SyntaxKind.VariableStatement) {
       const vsNode = <ts.VariableStatement>node;
       if(vsNode.declarationList.declarations.length > 0) {
         const varNode = vsNode.declarationList.declarations[0];
         let symbol = checker.getSymbolAtLocation(
           (<ts.VariableDeclaration>varNode).name
         );
-        if (generateDts || isSymbolHasComments(symbol)) {
+        if (!!symbol && (generateDts || isSymbolHasComments(symbol))) {
           visitVariableNode(varNode, symbol);
         }
       }
@@ -319,6 +416,7 @@ export function generateDocumentation(
       details.entryType = DocEntryType.interfaceType;
     }
     if (node.kind !== ts.SyntaxKind.ClassDeclaration) return details;
+    setTypeParameters(details.name, node);
     // Get the construct signatures
     let constructorType = checker.getTypeOfSymbolAtLocation(
       symbol,
@@ -328,25 +426,71 @@ export function generateDocumentation(
     details.constructors = constructorType
       .getConstructSignatures()
       .map(serializeSignature);
-
-    //get base class
-    details.baseType = "";
-    const classDeclaration = <ts.ClassDeclaration>node;
-    if (
-      classDeclaration &&
-      classDeclaration.heritageClauses &&
-      classDeclaration.heritageClauses.length > 0
-    ) {
-      const firstHeritageClause = classDeclaration.heritageClauses[0];
-      const firstHeritageClauseType = firstHeritageClause.types[0];
-      const extendsType = checker.getTypeAtLocation(
-        firstHeritageClauseType.expression
-      );
-      if (extendsType && extendsType.symbol) {
-        details.baseType = extendsType.symbol.name;
-      }
-    }
+    const firstHeritageClauseType = getFirstHeritageClauseType(<ts.ClassDeclaration>node);
+    details.baseType = getBaseType(firstHeritageClauseType);
+    setTypeParameters(details.baseType, firstHeritageClauseType, details.name);
     return details;
+  }
+  function getFirstHeritageClauseType(node: ts.ClassDeclaration): ts.ExpressionWithTypeArguments {
+    if (!node || !node.heritageClauses || node.heritageClauses.length < 1) return undefined;
+    const firstHeritageClause = node.heritageClauses[0];
+    return firstHeritageClause.types[0];
+  }
+  function getBaseType(firstHeritageClauseType: ts.ExpressionWithTypeArguments): string {
+    if(!firstHeritageClauseType) return "";
+    const extendsType = checker.getTypeAtLocation(
+      firstHeritageClauseType.expression
+    );
+    if (extendsType && extendsType.symbol) 
+      return extendsType.symbol.name;
+    const expression: any = firstHeritageClauseType.expression;
+    if(!!expression.text) return expression.text;
+    if(!!expression.expression && !!expression.expression.text && !!expression.name && !!expression.name.text)
+      return expression.expression.text + "." + expression.name.text;
+    return "";
+  }
+  function setTypeParameters(typeName: string, node: ts.Node, forTypeName?: string) {
+    if(!typeName || !node) return;
+    const parameters = getTypedParameters(node, !!forTypeName);
+    if(!parameters) return;
+    if(!forTypeName) {
+      dtsTypesParameters[typeName] = parameters;
+    } else {
+      let args = dtsTypesArgumentParameters[typeName];
+      if(!args) {
+        args = {};
+        dtsTypesArgumentParameters[typeName] = args;
+      }
+      args[forTypeName] = parameters;
+    }
+  }
+  function getTypedParameters(node: ts.Node, isArgument: boolean): string[] {
+    const params = getTypeParametersDeclaration(node, isArgument);
+    if(!params || !Array.isArray(params)) return undefined;
+    const res = [];
+    for(var i = 0; i < params.length; i ++) {
+      const name = getTypeParameterName(params[i], isArgument);
+      const extendsType = getTypeParameterConstrains(params[i]); 
+      res.push(name + extendsType);
+    }
+    return res.length > 0 ? res : undefined;
+  }
+  function getTypeParameterName(node: any, isArgument: boolean): string {
+    let symbol = checker.getSymbolAtLocation(isArgument? (<any>node).typeName : node.name);
+    if (!!symbol && symbol.name) return symbol.name;
+    return "any";
+  }
+  function getTypeParameterConstrains(node: any): string {
+    if(!node.default || !node.constraint) return "";
+    const first = getTypeParameterName(node.default, true);
+    const second = getTypeParameterName(node.constraint, true);
+    if(first == "any" || second == "any") return undefined;
+    return " extends " + first + " = " + second;
+  }
+  function getTypeParametersDeclaration(node: any, isArgument: boolean): ts.NodeArray<ts.TypeParameterDeclaration> {
+    if(!isArgument && !!node.typeParameters) return node.typeParameters;
+    if(isArgument && !!node.typeArguments) return node.typeArguments;
+    return undefined;
   }
 
   /** Serialize a method symbol infomration */
@@ -593,16 +737,18 @@ export function generateDocumentation(
     }
   }
   function getDtsDeclarationClass(lines: string[], entry: DocEntry) {
+    if(entry.name === "default") return;
     getDtsDoc(lines, entry);
     let line = "export declare ";
-    line += "class " + entry.name + getDtsClassExtend(entry) + " {";
+    line += "class " + getDtsType(entry.name) + getDtsTypeGeneric(entry.name) + getDtsClassExtend(entry) + getDtsTypeGeneric(entry.baseType, entry.name) + " {";
     lines.push(line);
+    getDtsDeclarationConstructor(lines, entry);
     getDtsDeclarationBody(lines, entry);
     lines.push("}");
   }
   function getDtsDeclarationInterface(lines: string[], entry: DocEntry) {
     getDtsDoc(lines, entry);
-    var line = "export interface " + entry.name + " {";
+    var line = "export interface " + getDtsType(entry.name) + getDtsTypeGeneric(entry.name) + " {";
     lines.push(line);
     getDtsDeclarationBody(lines, entry);
     lines.push("}");
@@ -611,21 +757,22 @@ export function generateDocumentation(
     getDtsDoc(lines, entry, level);
     var line = (level === 0 ? "export declare var " : addDtsTabs(level)) + entry.name + ": ";
     const hasMembers = Array.isArray(entry.members);
-    line += hasMembers ? "{" : (getDtsType(entry.type) + ";");
+    const comma = level === 0 ? ";" : ",";
+    line += hasMembers ? "{" : (getDtsType(entry.type) + comma);
     lines.push(line);
     if(hasMembers) {
         for(var i = 0; i < entry.members.length; i ++) {
           if(isDtsPrevMemberTheSame(entry.members, i)) continue;
           getDtsDeclarationVariable(lines, entry.members[i], level + 1);
         }
-        lines.push(addDtsTabs(level) + "}")
+        lines.push(addDtsTabs(level) + "}" + comma);
     }
   }
   function getDtsClassExtend(cur: DocEntry): string {
     if(!cur.baseType) return "";
+    if(!getHasDtsClassType(cur.baseType)) return "";
     const entry: DocEntry = dtsDeclarations[cur.baseType];
-    if(!entry) return "";
-    if(entry.entryType === DocEntryType.interfaceType)
+    if(!!entry && entry.entryType === DocEntryType.interfaceType)
       return Array.isArray(cur.members) ? " implements " + cur.baseType : "";
     return  " extends " + cur.baseType;
   }
@@ -638,6 +785,13 @@ export function generateDocumentation(
       const member = members[i];
       if(hasDtsMemberInBaseClasses(entry, member.name)) continue;
       getDtsDeclarationMember(lines, member);
+    }
+  }
+  function getDtsDeclarationConstructor(lines: string[], entry: DocEntry) {
+    if(!Array.isArray(entry.constructors)) return;
+    for(var i = 0; i < entry.constructors.length; i ++) {
+      const parameters = getDtsParameters(entry.constructors[i]);
+      lines.push(addDtsTabs() + "constructor(" + parameters + ");");
     }
   }
   function getDtsDeclarationMember(lines: string[], member: DocEntry) {
@@ -661,6 +815,7 @@ export function generateDocumentation(
     }
   }
   function getDtsDoc(lines: string[], entry: DocEntry, level: number = 0) {
+    return; //TODO
     if(!entry.documentation) return;
     const docLines = entry.documentation.split("\n");
     lines.push(addDtsTabs(level) + "/*");
@@ -687,13 +842,24 @@ export function generateDocumentation(
   function getDtsType(type: string): string {
     if(!type) return "void";
     if(type.indexOf("|") > -1) {
-
       return type.indexOf("(") > -1 ? "any" : type;
     }
     let str = type.replace("[", "").replace("]", "");
     if(str === "number" || str === "boolean" || str === "string" || str === "any" || str === "void") return type;
-    if(dtsDeclarations[str]) return type;
-    return "any"
+    return getHasDtsClassType(str) ? type : "any";
+  }
+  function getDtsTypeGeneric(type: string, typeFor?: string): string {
+    if(!type) return "";
+    if(!typeFor) return gtDtsTypeGenericByParameters(dtsTypesParameters[type]);
+    const args = dtsTypesArgumentParameters[type];
+    if(!args) return "";
+    return gtDtsTypeGenericByParameters(args[typeFor]);
+  }
+  function gtDtsTypeGenericByParameters(params: string[]): string {
+    return Array.isArray(params) ? "<" + params.join(", ") + ">" : "";
+  }
+  function getHasDtsClassType(type: string): boolean {
+    return !!dtsDeclarations[type] || type.indexOf("React.") === 0;
   }
   function isDtsPrevMemberTheSame(members: Array<DocEntry>, index: number): boolean {
     return index > 0 && members[index].name === members[index - 1].name;
@@ -726,7 +892,7 @@ export function generateDocumentation(
   }
   function addDtsTabs(level: number = 1): string {
     let str = "";
-    for(var i = 0; i < level; i++) str+= "\t\t";
+    for(var i = 0; i < level; i++) str+= "  ";
     return str;
   }
 }
