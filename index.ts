@@ -26,6 +26,7 @@ interface DocEntry {
   isSerialized?: boolean;
   defaultValue?: any;
   serializedChoices?: any[];
+  moduleName?: string;
 }
 
 var jsonObjMetaData: any = null;
@@ -69,6 +70,8 @@ export function generateDocumentation(
   let generateDocs = !docOptions && !generateDts || (!!docOptions && docOptions.generateDoc !== false);
   let outputDefinition = {};
   let dtsImports = {};
+  let dtsImportDeclarations = {};
+  let dtsFrameworksImportDeclarations = {};
   let dtsDeclarations = {};
   let dtsTypesParameters = {};
   let dtsTypesArgumentParameters = {};
@@ -103,10 +106,14 @@ export function generateDocumentation(
     );
   }
   if(generateDts) {
+    importDtsFiles(docOptions.dtsImports);
     prepareDtsInfo();
-    fs.writeFileSync(process.cwd() + "\\" + dtsFileName, getDtsText());
+    fs.writeFileSync(getAbsoluteFileName(dtsFileName), dtsGetText());
   }
   return;
+  function getAbsoluteFileName(name: string): string {
+    return path.join(process.cwd(), name);
+  }
 
   /** set allParentTypes */
   function setAllParentTypes(className: string) {
@@ -128,87 +135,6 @@ export function generateDocumentation(
       cur.allTypes.push(baseClass.allTypes[i]);
     }
   }
-/*  
-  function getFileNames(fileNames: Array<string>): Array<string> {
-    const res = [];
-    for(var i = 0; i < fileNames.length; i ++) {
-      res.push(fileNames[i]);
-      res.push(getImportedVarNamesFile(fileNames[i]));
-    }
-    return res;
-  }
-  function getImportedVarNamesFile(fileName: string): string {
-    let text: string = fs.readFileSync(fileName, 'utf8');
-    text = text.replace(/\r/gm, "");
-    text = text.replace(/\/{2}(.*)\n/gm, "");
-    text = text.replace(/(?<!;)\n/gm, "");
-    const lines = text.split("\n");
-    const dir = path.dirname(fileName);
-    const file = path.basename(fileName);
-    const localDir = process.cwd();
-    const imports = [];
-    const importVars = [];
-    for(var i = 0; i < lines.length; i ++) {
-      let str = lines[i];
-      if(str.indexOf("from") < 0) continue;
-      const indexEnd = str.lastIndexOf('"');
-      const indexStart = str.lastIndexOf('"', indexEnd - 1);
-      if(indexStart < indexEnd && indexStart > -1) {
-        let relFileName = str.substring(indexStart + 1, indexEnd - 1);
-        let absFileName = path.join(dir, relFileName);
-        absFileName = absFileName.replace(/\\/g, "\\\\");
-        str = str.replace(relFileName, absFileName).trim();
-        str = str.replace("export {", "import {");
-        imports.push(str);
-        if(str.indexOf("{") > -1) {
-          str.match(/\{(.*)}/g).forEach((val: string) => {
-            const vars = val.replace("{", "").replace("}", "").trim().split(",");
-            for(let j = 0; j < vars.length; j ++) {
-              const name = vars[j].trim();
-              if(!name || name[0] !== name[0].toUpperCase()) continue;
-              importVars.push("var var" + name + " :" + name + ";");
-            }
-          });
-        }
-      }
-    }
-    text = imports.join("\n") + "\n" + importVars.join("\n");
-    const newFileName = path.join(localDir, file);
-    //fs.writeFileSync(newFileName, text);
-    return newFileName;
-  }
-  function getFileNames(fileNames: Array<string>): Array<string> {
-    const files = {};
-    for(var i = 0; i < fileNames.length; i ++) {
-      files[fileNames[i]] = true;
-      const imFiles = getImportedFileNames(fileNames[i]);
-      for(var j = 0; j < imFiles.length; j ++) {
-        files[imFiles[j]] = true;
-      }
-    }
-    const res = [];
-    for(key in files)  res.push(key);
-    return res;
-  }
-
-  function getImportedFileNames(fileName: string): string[] {
-    const text: string = fs.readFileSync(fileName, 'utf8');
-    const lines = text.split("\n");
-    const dir = path.dirname(fileName);
-    const res = [];
-    for(var i = 0; i < lines.length; i ++) {
-      let str = lines[i];
-      if(str.indexOf("from") < 0) continue;
-      const indexEnd = str.lastIndexOf('"');
-      const indexStart = str.lastIndexOf('"', indexEnd - 1);
-      if(indexStart < indexEnd && indexStart > -1) {
-        str = str.substring(indexStart + 1, indexEnd);
-        res.push(path.join(dir, str));
-      }
-    } 
-    return res;
-  }
-*/  
   /** visit nodes finding exported classes */
   function visit(node: ts.Node) {
     // Only consider exported nodes
@@ -680,6 +606,29 @@ export function generateDocumentation(
     if (!curClass) return type;
     return { $href: "#" + curClass.jsonName };
   }
+  function importDtsFiles(imports: Array<any>) {
+    if(!Array.isArray(imports)) return;
+    for(var i = 0; i < imports.length; i ++) {
+      importDtsFile(imports[i].name, imports[i].file);
+    }
+  }
+  function importDtsFile(moduleName: string, fileName: string) {
+    let text: string = fs.readFileSync(getAbsoluteFileName(fileName), 'utf8');
+    const regExStrs = [{regex: /(?<=export interface)(.*)(?={)/gm, type: DocEntryType.interfaceType}, 
+      {regex: /(?<=export declare var)(.*)(?=:)/gm, type: DocEntryType.variableType}, 
+      {regex: /(?<=export declare class)(.*)(?={)/gm, type: DocEntryType.classType}, 
+      {regex: /(?<=export declare class)(.*)(?=extends)/gm, type: DocEntryType.classType},
+      {regex: /(?<=export declare class)(.*)(?=implements)/gm, type: DocEntryType.classType},
+      {regex: /(?<=export declare class)(.*)(?=<)/gm, type: DocEntryType.classType}];
+    for(var i = 0; i < regExStrs.length; i ++) {
+      const item = regExStrs[i];
+      text.match(item.regex).forEach((name: string) => {
+        if(!!name && !!name.trim()) {
+          dtsImports[name.trim()] = {name: name.trim(), moduleName: moduleName, entryType: item.type};
+        }
+      });
+    }
+  }
   function prepareDtsInfo() {
     for(var key in classesHash) {
       proccessDtsClass(classesHash[key]);
@@ -687,26 +636,19 @@ export function generateDocumentation(
   }
   function proccessDtsClass(curClass: DocEntry) {
     dtsDeclarations[curClass.name] = curClass;
-    proccessDtsClassMembers(curClass);
   }
-  function proccessDtsClassMembers(curClass: DocEntry) {
-
-  }
-  function getDtsText(): string {
+  function dtsGetText(): string {
     const lines = [];
-    getDtsImports(lines);
-    getDtsDeclarations(lines);
+    dtsRenderDeclarations(lines);
     return lines.join("\n");
   }
-  function getDtsImports(lines: string[]) {
-
-  }
-  function getDtsDeclarations(lines: string[]) {
+  function dtsRenderDeclarations(lines: string[]) {
     const classes = [];
     const interfaces = [];
     const variables = [];
 
     for(var key in dtsDeclarations) {
+      if(!!dtsImports[key]) continue;
       const cur = dtsDeclarations[key];
       if (cur.entryType === DocEntryType.classType) {
           classes.push(cur);
@@ -716,8 +658,21 @@ export function generateDocumentation(
       }
       if (cur.entryType === DocEntryType.variableType) {
         variables.push(cur);
+      } 
     }
+    dtsSortClasses(classes);
+    for (var i = 0; i < interfaces.length; i++) {
+      dtsRenderDeclarationInterface(lines, interfaces[i]);
+    }
+    for(var i = 0; i < classes.length; i ++) {
+      dtsRenderDeclarationClass(lines, classes[i]);
+    }
+    for(var i = 0; i < variables.length; i ++) {
+      dtsRenderDeclarationVariable(lines, variables[i], 0);
+    }
+    dtsRenderImports(lines);
   }
+  function dtsSortClasses(classes: DocEntry[]) {
     classes.sort((a: DocEntry, b: DocEntry) : number => {
       if(a.allTypes.indexOf(b.name) > -1) return 1;
       if(b.allTypes.indexOf(a.name) > -1) return -1;
@@ -726,105 +681,129 @@ export function generateDocumentation(
       }
       return  a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
-    for (var i = 0; i < interfaces.length; i++) {
-      getDtsDeclarationInterface(lines, interfaces[i]);
+  }
+  function dtsRenderImports(lines: string[]) {
+    const modules: any = {};
+    for(key in dtsImportDeclarations) {
+      const entry: DocEntry = dtsImportDeclarations[key];
+      let arr = modules[entry.moduleName];
+      if(!arr) {
+        arr = [];
+        modules[entry.moduleName] = arr;
+      }
+      arr.push(key);
     }
-    for(var i = 0; i < classes.length; i ++) {
-      getDtsDeclarationClass(lines, classes[i]);
+    const importLines: string[] =[];
+    for(key in modules) {
+      const arr: string[] = modules[key];
+      while(arr.length > 0) {
+        const renderedArr = arr.splice(0, 5);
+        let str = "import { " + renderedArr.join(", ") + " } from \"" + key + "\";";
+        importLines.push(str);
+      }
     }
-    for(var i = 0; i < variables.length; i ++) {
-      getDtsDeclarationVariable(lines, variables[i], 0);
+    for(var key in dtsFrameworksImportDeclarations) {
+      importLines.push(dtsFrameworksImportDeclarations[key] + " from \"" + key + "\";");
+    }
+    if(importLines.length > 0) {
+      lines.unshift("");
+    }
+    for(let i = importLines.length - 1; i >= 0; i --) {
+      lines.unshift(importLines[i]);
     }
   }
-  function getDtsDeclarationClass(lines: string[], entry: DocEntry) {
+  function dtsRenderDeclarationClass(lines: string[], entry: DocEntry) {
     if(entry.name === "default") return;
-    getDtsDoc(lines, entry);
+    dtsRenderDoc(lines, entry);
     let line = "export declare ";
-    line += "class " + getDtsType(entry.name) + getDtsTypeGeneric(entry.name) + getDtsClassExtend(entry) + getDtsTypeGeneric(entry.baseType, entry.name) + " {";
+    line += "class " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + dtsGetTypeGeneric(entry.baseType, entry.name) + " {";
     lines.push(line);
-    getDtsDeclarationConstructor(lines, entry);
-    getDtsDeclarationBody(lines, entry);
+    dtsRenderDeclarationConstructor(lines, entry);
+    dtsRenderDeclarationBody(lines, entry);
     lines.push("}");
   }
-  function getDtsDeclarationInterface(lines: string[], entry: DocEntry) {
-    getDtsDoc(lines, entry);
-    var line = "export interface " + getDtsType(entry.name) + getDtsTypeGeneric(entry.name) + " {";
+  function dtsRenderDeclarationInterface(lines: string[], entry: DocEntry) {
+    dtsRenderDoc(lines, entry);
+    var line = "export interface " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + " {";
     lines.push(line);
-    getDtsDeclarationBody(lines, entry);
+    dtsRenderDeclarationBody(lines, entry);
     lines.push("}");
   }
-  function getDtsDeclarationVariable(lines: string[], entry: DocEntry, level: number) {
-    getDtsDoc(lines, entry, level);
-    var line = (level === 0 ? "export declare var " : addDtsTabs(level)) + entry.name + ": ";
+  function dtsRenderDeclarationVariable(lines: string[], entry: DocEntry, level: number) {
+    dtsRenderDoc(lines, entry, level);
+    var line = (level === 0 ? "export declare var " : dtsAddSpaces(level)) + entry.name + ": ";
     const hasMembers = Array.isArray(entry.members);
     const comma = level === 0 ? ";" : ",";
-    line += hasMembers ? "{" : (getDtsType(entry.type) + comma);
+    line += hasMembers ? "{" : (dtsGetType(entry.type) + comma);
     lines.push(line);
     if(hasMembers) {
         for(var i = 0; i < entry.members.length; i ++) {
-          if(isDtsPrevMemberTheSame(entry.members, i)) continue;
-          getDtsDeclarationVariable(lines, entry.members[i], level + 1);
+          if(dtsIsPrevMemberTheSame(entry.members, i)) continue;
+          dtsRenderDeclarationVariable(lines, entry.members[i], level + 1);
         }
-        lines.push(addDtsTabs(level) + "}" + comma);
+        lines.push(dtsAddSpaces(level) + "}" + comma);
     }
   }
-  function getDtsClassExtend(cur: DocEntry): string {
+  function dtsRenderClassExtend(cur: DocEntry): string {
     if(!cur.baseType) return "";
-    if(!getHasDtsClassType(cur.baseType)) return "";
-    const entry: DocEntry = dtsDeclarations[cur.baseType];
+    if(!dtsGetHasClassType(cur.baseType)) return "";
+    let entry: DocEntry = dtsDeclarations[cur.baseType];
+    if(!entry) {
+      entry = dtsImports[cur.baseType];
+    }
     if(!!entry && entry.entryType === DocEntryType.interfaceType)
       return Array.isArray(cur.members) ? " implements " + cur.baseType : "";
     return  " extends " + cur.baseType;
   }
-  function getDtsDeclarationBody(lines: string[], entry: DocEntry) {
+  function dtsRenderDeclarationBody(lines: string[], entry: DocEntry) {
     if(!Array.isArray(entry.members)) return;
     const members = [].concat(entry.members);
-    addDtsMissingMembersInClassFromInterface(entry, members);
+    dtsGetMissingMembersInClassFromInterface(entry, members);
     for(var i = 0; i < members.length; i ++) {
-      if(isDtsPrevMemberTheSame(members, i)) continue;
+      if(dtsIsPrevMemberTheSame(members, i)) continue;
       const member = members[i];
-      if(hasDtsMemberInBaseClasses(entry, member.name)) continue;
-      getDtsDeclarationMember(lines, member);
+      if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
+      dtsRenderDeclarationMember(lines, member);
     }
   }
-  function getDtsDeclarationConstructor(lines: string[], entry: DocEntry) {
+  function dtsRenderDeclarationConstructor(lines: string[], entry: DocEntry) {
     if(!Array.isArray(entry.constructors)) return;
     for(var i = 0; i < entry.constructors.length; i ++) {
-      const parameters = getDtsParameters(entry.constructors[i]);
-      lines.push(addDtsTabs() + "constructor(" + parameters + ");");
+      const parameters = dtsGetParameters(entry.constructors[i]);
+      lines.push(dtsAddSpaces() + "constructor(" + parameters + ");");
     }
   }
-  function getDtsDeclarationMember(lines: string[], member: DocEntry) {
+  function dtsRenderDeclarationMember(lines: string[], member: DocEntry) {
     if(member.pmeType === "function" || member.pmeType === "method") {
-      getDtsDoc(lines, member, 1);
-      const returnType = getDtsType(member.returnType);
-      const parameters = getDtsParameters(member);
-      lines.push(addDtsTabs() + member.name + "(" + parameters + "): " + returnType + ";");
+      dtsRenderDoc(lines, member, 1);
+      const returnType = dtsGetType(member.returnType);
+      const parameters = dtsGetParameters(member);
+      lines.push(dtsAddSpaces() + member.name + "(" + parameters + "): " + returnType + ";");
     }
     if(member.pmeType === "property") {
-      getDtsDoc(lines, member, 1);
-      const propType = getDtsType(member.type);
+      dtsRenderDoc(lines, member, 1);
+      const propType = dtsGetType(member.type);
       if(member.isField) {
-        lines.push(addDtsTabs() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
+        lines.push(dtsAddSpaces() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
       } else {
-        lines.push(addDtsTabs() + "get " + member.name + "(): " + propType + ";");
+        lines.push(dtsAddSpaces() + "get " + member.name + "(): " + propType + ";");
         if(member.hasSet) {
-          lines.push(addDtsTabs() + "set " + member.name + "(val: " + propType + ");");
+          lines.push(dtsAddSpaces() + "set " + member.name + "(val: " + propType + ");");
         }
       }
     }
   }
-  function getDtsDoc(lines: string[], entry: DocEntry, level: number = 0) {
+  function dtsRenderDoc(lines: string[], entry: DocEntry, level: number = 0) {
     return; //TODO
     if(!entry.documentation) return;
     const docLines = entry.documentation.split("\n");
-    lines.push(addDtsTabs(level) + "/*");
+    lines.push(dtsAddSpaces(level) + "/*");
     for(var i = 0; i < docLines.length; i ++) {
-      lines.push(addDtsTabs(level) + "* " + docLines[i]);
+      lines.push(dtsAddSpaces(level) + "* " + docLines[i]);
     }
-    lines.push(addDtsTabs(level) + "*/");
+    lines.push(dtsAddSpaces(level) + "*/");
   }
-  function addDtsMissingMembersInClassFromInterface(entry: DocEntry, members: Array<DocEntry>) {
+  function dtsGetMissingMembersInClassFromInterface(entry: DocEntry, members: Array<DocEntry>) {
     if(entry.entryType !== DocEntryType.classType || !entry.baseType) return;
     const parentEntry: DocEntry = dtsDeclarations[entry.baseType] ;
     if(!parentEntry || parentEntry.entryType !== DocEntryType.interfaceType || !Array.isArray(parentEntry.members)) return
@@ -839,58 +818,74 @@ export function generateDocumentation(
       }
     }
   }
-  function getDtsType(type: string): string {
+  function dtsGetType(type: string): string {
     if(!type) return "void";
     if(type.indexOf("|") > -1) {
       return type.indexOf("(") > -1 ? "any" : type;
     }
     let str = type.replace("[", "").replace("]", "");
     if(str === "number" || str === "boolean" || str === "string" || str === "any" || str === "void") return type;
-    return getHasDtsClassType(str) ? type : "any";
+    return dtsGetHasClassType(str) ? type : "any";
   }
-  function getDtsTypeGeneric(type: string, typeFor?: string): string {
+  function dtsGetTypeGeneric(type: string, typeFor?: string): string {
     if(!type) return "";
-    if(!typeFor) return gtDtsTypeGenericByParameters(dtsTypesParameters[type]);
+    if(!typeFor) return dtsGetTypeGenericByParameters(dtsTypesParameters[type]);
     const args = dtsTypesArgumentParameters[type];
     if(!args) return "";
-    return gtDtsTypeGenericByParameters(args[typeFor]);
+    return dtsGetTypeGenericByParameters(args[typeFor]);
   }
-  function gtDtsTypeGenericByParameters(params: string[]): string {
-    return Array.isArray(params) ? "<" + params.join(", ") + ">" : "";
+  function dtsGetTypeGenericByParameters(params: string[]): string {
+    if(!Array.isArray(params)) return "";
+    for(var i = 0; i < params.length; i ++) {
+      dtsAddImportDeclaration(params[i]);
+    }
+    return "<" + params.join(", ") + ">";
   }
-  function getHasDtsClassType(type: string): boolean {
-    return !!dtsDeclarations[type] || type.indexOf("React.") === 0;
+  function dtsGetHasClassType(type: string): boolean {
+    if(dtsAddImportDeclaration(type)) return true;
+    return !!dtsDeclarations[type];
   }
-  function isDtsPrevMemberTheSame(members: Array<DocEntry>, index: number): boolean {
+  function dtsAddImportDeclaration(type: string): boolean {
+    if(!type) return false;
+    if(type.indexOf("React.") === 0) {
+      dtsFrameworksImportDeclarations["react"] = "import * as React";
+      return true;
+    }
+    const entry = dtsImports[type];
+    if(!entry) return false;
+    dtsImportDeclarations[type] = entry;
+    return true;
+  }
+  function dtsIsPrevMemberTheSame(members: Array<DocEntry>, index: number): boolean {
     return index > 0 && members[index].name === members[index - 1].name;
   }
-  function getDtsParameters(member: DocEntry): string {
+  function dtsGetParameters(member: DocEntry): string {
     if(!Array.isArray(member.parameters)) return "";
     let strs  = [];
     const params = member.parameters;
     for(var i = 0; i < params.length; i ++) {
       const p = params[i];
-      strs.push(p.name + (p.isOptional ? "?" : "") + ": " + getDtsType(p.type));
+      strs.push(p.name + (p.isOptional ? "?" : "") + ": " + dtsGetType(p.type));
     }
     return strs.join(", ");
   }
-  function hasDtsMemberInBaseClasses(entry: DocEntry, name: string): boolean {
+  function dtsHasMemberInBaseClasses(entry: DocEntry, name: string): boolean {
     if(!Array.isArray(entry.allTypes)) return false;
     for(var i = 1; i < entry.allTypes.length; i ++) {
       let parentEntry: DocEntry = dtsDeclarations[entry.allTypes[i]];
       if(parentEntry.entryType === DocEntryType.interfaceType) continue;
-      if(hasDtsMember(parentEntry, name)) return true;
+      if(dtsHasMember(parentEntry, name)) return true;
     }
     return false;
   }
-  function hasDtsMember(entry: DocEntry, name: string): boolean {
+  function dtsHasMember(entry: DocEntry, name: string): boolean {
     if(!entry.members) return false;
     for(var i = 0; i < entry.members.length; i ++) {
       if(entry.members[i].name === name) return true;
     }
     return false;
   }
-  function addDtsTabs(level: number = 1): string {
+  function dtsAddSpaces(level: number = 1): string {
     let str = "";
     for(var i = 0; i < level; i++) str+= "  ";
     return str;
