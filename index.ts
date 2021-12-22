@@ -69,6 +69,7 @@ export function generateDocumentation(
     !!docOptions && docOptions.generateJSONDefinition === true;
   let generateDocs = !docOptions && !generateDts || (!!docOptions && docOptions.generateDoc !== false);
   let outputDefinition = {};
+  let dtsExportsDeclarations = [];
   let dtsImports = {};
   let dtsImportDeclarations = {};
   let dtsFrameworksImportDeclarations = {};
@@ -106,7 +107,8 @@ export function generateDocumentation(
     );
   }
   if(generateDts) {
-    importDtsFiles(docOptions.dtsImports);
+    dtsSetupExportVariables(fileNames);
+    dtsImportFiles(docOptions.dtsImports);
     prepareDtsInfo();
     fs.writeFileSync(getAbsoluteFileName(dtsFileName), dtsGetText());
   }
@@ -606,7 +608,18 @@ export function generateDocumentation(
     if (!curClass) return type;
     return { $href: "#" + curClass.jsonName };
   }
-  function importDtsFiles(imports: Array<any>) {
+  function dtsSetupExportVariables(fileNames: Array<string>) {
+    for(var i = 0; i < fileNames.length; i++) {
+      dtsSetupExportVariablesPerFile(fileNames[i]);
+    }
+  }
+  function dtsSetupExportVariablesPerFile(fileName: string) {
+    let text: string = fs.readFileSync(getAbsoluteFileName(fileName), 'utf8');
+    text.match(/(export)(.*)(};)/gm).forEach((text: string) => {
+      dtsExportsDeclarations.push(text);
+    });
+  }
+  function dtsImportFiles(imports: Array<any>) {
     if(!Array.isArray(imports)) return;
     for(var i = 0; i < imports.length; i ++) {
       importDtsFile(imports[i].name, imports[i].file);
@@ -659,6 +672,12 @@ export function generateDocumentation(
       if (cur.entryType === DocEntryType.variableType) {
         variables.push(cur);
       } 
+    }
+    for(var i = 0; i < dtsExportsDeclarations.length; i ++) {
+      lines.push(dtsExportsDeclarations[i]);
+    }
+    if(dtsExportsDeclarations.length > 0) {
+      lines.push("");
     }
     dtsSortClasses(classes);
     for (var i = 0; i < interfaces.length; i++) {
