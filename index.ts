@@ -409,11 +409,12 @@ export function generateDocumentation(
     return "any";
   }
   function getTypeParameterConstrains(node: any): string {
-    if(!node.default || !node.constraint) return "";
+    if(!node.default) return "";
     const first = getTypeParameterName(node.default, true);
-    const second = getTypeParameterName(node.constraint, true);
-    if(first == "any" || second == "any") return undefined;
-    return " extends " + first + " = " + second;
+    const second =  !!node.constraint ? getTypeParameterName(node.constraint, true) : "";
+    if(!first) return "";
+    if(!!second) return " extends " + first + " = " + second;
+    return " = " + first;
   }
   function getTypeParametersDeclaration(node: any, isArgument: boolean): ts.NodeArray<ts.TypeParameterDeclaration> {
     if(!isArgument && !!node.typeParameters) return node.typeParameters;
@@ -615,7 +616,9 @@ export function generateDocumentation(
   }
   function dtsSetupExportVariablesPerFile(fileName: string) {
     let text: string = fs.readFileSync(getAbsoluteFileName(fileName), 'utf8');
-    text.match(/(export)(.*)(};)/gm).forEach((text: string) => {
+    const mathArray = text.match(/(export)(.*)(};)/gm);
+    if(!Array.isArray(mathArray)) return;
+    mathArray.forEach((text: string) => {
       dtsExportsDeclarations.push(text);
     });
   }
@@ -635,7 +638,9 @@ export function generateDocumentation(
       {regex: /(?<=export declare class)(.*)(?=<)/gm, type: DocEntryType.classType}];
     for(var i = 0; i < regExStrs.length; i ++) {
       const item = regExStrs[i];
-      text.match(item.regex).forEach((name: string) => {
+      const mathArray = text.match(item.regex);
+      if(!Array.isArray(mathArray)) continue;
+      mathArray.forEach((name: string) => {
         if(!!name && !!name.trim()) {
           dtsImports[name.trim()] = {name: name.trim(), moduleName: moduleName, entryType: item.type};
         }
