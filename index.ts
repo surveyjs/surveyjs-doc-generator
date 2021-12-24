@@ -34,6 +34,7 @@ var jsonObjMetaData: any = null;
 const tsDefaultOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES5,
   module: ts.ModuleKind.ES2015,
+//  moduleResolution: ts.ModuleResolutionKind.NodeJs,
   lib: ["DOM", "ES5", "ES6", "ES2015.Promise"],
   noImplicitAny: true,
   importHelpers: false,
@@ -42,6 +43,7 @@ const tsDefaultOptions: ts.CompilerOptions = {
   jsx: ts.JsxEmit.React,
   baseUrl: "."
 };
+    //"lib": [ "es2015", "es2017", "es6", "dom", "es2015.iterable" ],
 function getTsOptions(options: ts.CompilerOptions): ts.CompilerOptions {
   const res: ts.CompilerOptions = {};
   for(key in tsDefaultOptions) res[key] = tsDefaultOptions[key];
@@ -113,7 +115,8 @@ export function generateDts(options: IDtsBundleOptions) {
 export function generateDocumentation(
   fileNames: string[], options: ts.CompilerOptions, docOptions: any = {}
 ): void {
-
+  let dtsVueGeneratedFiles = [];
+  generateVueTSFiles(fileNames);
   const tsOptions: ts.CompilerOptions = getTsOptions(options);
   if(!checkFiles(fileNames, "File for compiling is not found")) return;
   const host = ts.createCompilerHost(tsOptions);
@@ -183,7 +186,40 @@ export function generateDocumentation(
     dtsImportFiles(docOptions.paths);
     fs.writeFileSync(getAbsoluteFileName(dtsOutput), dtsGetText());
   }
+  deleteVueTSFiles();
   return;
+  function generateVueTSFiles(fileNames: string[]) {
+    for(var i = 0; i < fileNames.length; i++) {
+      const fn = fileNames[i];
+      let text: string = fs.readFileSync(getAbsoluteFileName(fn), 'utf8');
+      generateVueTSFile(text, path.dirname(fn));
+    }
+  }
+  function generateVueTSFile(text: string, dir: string) {
+    const matchArray = text.match(/(?<=")(.*)(?=.vue";)/gm);
+    if(!Array.isArray(matchArray)) return;
+    for(var i = 0; i < matchArray.length; i ++) {
+      const fileName = path.join(dir, matchArray[i] + ".vue");
+      if(!fs.existsSync(fileName)) continue;
+      let absFileName = getAbsoluteFileName(fileName);
+      const vueText: string = fs.readFileSync(absFileName, 'utf8');
+      const startStr = "<script lang=\"ts\">";
+      const endStr = "</script>";
+      const startIndex = vueText.indexOf(startStr) + startStr.length;
+      const endIndex = vueText.lastIndexOf(endStr);
+      if(endIndex > startIndex && startIndex > 0) {
+        const vue_tsText = vueText.substring(startIndex, endIndex);
+        absFileName += ".ts";
+        dtsVueGeneratedFiles.push(absFileName);
+        fs.writeFileSync(absFileName, vue_tsText);
+      }
+    }
+  }
+  function deleteVueTSFiles() {
+    for(var i = 0; i < dtsVueGeneratedFiles.length; i ++) {
+      fs.unlinkSync(dtsVueGeneratedFiles[i]);
+    }
+  }
   function isNonEnglishLocalizationFile(fileName: string): boolean {
     const dir = path.dirname(fileName);
     const name = path.basename(fileName);
@@ -234,6 +270,7 @@ export function generateDocumentation(
       let symbol = checker.getSymbolAtLocation(
         (<ts.ClassDeclaration>node).name
       );
+      if(!symbol) return;
       if (generateDts || isSymbolHasComments(symbol)) {
         visitDocumentedNode(node, symbol);
       }
@@ -690,11 +727,12 @@ export function generateDocumentation(
   }
   function dtsSetupExportVariables(fileNames: Array<string>) {
     for(var i = 0; i < fileNames.length; i++) {
-      dtsSetupExportVariablesPerFile(fileNames[i]);
+      const fn = fileNames[i];
+      let text: string = fs.readFileSync(getAbsoluteFileName(fn), 'utf8');
+      dtsSetupExportVariablesFromText(text);
     }
   }
-  function dtsSetupExportVariablesPerFile(fileName: string) {
-    let text: string = fs.readFileSync(getAbsoluteFileName(fileName), 'utf8');
+  function dtsSetupExportVariablesFromText(text: string) {
     const matchArray = text.match(/(export)(.*)(};)/gm);
     if(!Array.isArray(matchArray)) return;
     matchArray.forEach((text: string) => {
@@ -963,6 +1001,10 @@ export function generateDocumentation(
     if(!type) return false;
     if(type.indexOf("React.") === 0) {
       dtsFrameworksImportDeclarations["react"] = "import * as React";
+      return true;
+    }
+    if(type === "Vue") {
+      dtsFrameworksImportDeclarations["vue"] = "import Vue";
       return true;
     }
     const entry = dtsImports[type];
