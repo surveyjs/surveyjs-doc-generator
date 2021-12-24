@@ -30,32 +30,92 @@ interface DocEntry {
 }
 
 var jsonObjMetaData: any = null;
+const tsDefaultOptions: ts.CompilerOptions = {
+  target: ts.ScriptTarget.ES5,
+  module: ts.ModuleKind.ES2015,
+  lib: ["DOM", "ES5", "ES6", "ES2015.Promise"],
+  noImplicitAny: true,
+  importHelpers: false,
+  experimentalDecorators: true,
+  allowSyntheticDefaultImports: true,
+  jsx: ts.JsxEmit.React,
+  baseUrl: "."
+};
+function getTsOptions(options: ts.CompilerOptions): ts.CompilerOptions {
+  const res: ts.CompilerOptions = {};
+  for(key in tsDefaultOptions) res[key] = tsDefaultOptions[key];
+  for(var key in options) res[key] = options[key];
+  return res;
+}
+
 export function setJsonObj(obj: any) {
   jsonObjMetaData = obj;
 }
 
+function printError(text: string) {
+  console.log(text);
+}
+
+function checkFiles(fileNames: string[], errorText: string) {
+  if(!Array.isArray(fileNames)) {
+    printError("file list is empty");
+     return false;
+  }
+  for(var i = 0; i < fileNames.length; i ++) {
+    const absFileName = getAbsoluteFileName(fileNames[i]);
+    if(!fs.existsSync(absFileName)) {
+      printError(errorText + ": " + absFileName);
+      return false;
+    }
+  }
+  return true;
+}
+function getAbsoluteFileName(name: string): string {
+  return path.join(process.cwd(), name);
+}
+
+export interface IDtsBundleOptions {
+  entries: string[],
+  out: string,
+  paths?: ts.MapLike<string[]>
+}
+
+export function generateDts(options: IDtsBundleOptions) {
+  if(!options.out) {
+    printError("out is empty.");
+    return;
+  }
+  let outDir = path.dirname(options.out);
+  if(!checkFiles([outDir], "directory for out file is not found")) return;
+  const docOptions = {generateDoc: false, generateJSONDefinition: false, dtsOutput: options.out, paths: options.paths};
+  const tsOptions: ts.CompilerOptions = {};
+  if(options.paths) {
+    tsOptions.paths = options.paths;
+  }
+  generateDocumentation(options.entries, tsOptions, docOptions);
+  if(!checkFiles([options.out], "Generated d.ts file is not found")) return;
+
+  const program = ts.createProgram([options.out], getTsOptions(tsOptions));
+  const srcFile = program.getSourceFile(options.out);
+  const diagnostics = program.getSyntacticDiagnostics(srcFile);
+  for(var i = 0; i < diagnostics.length; i ++) {
+    const msgText: any = diagnostics[i].messageText;
+    printError(!!msgText.messageText? msgText.messageText: msgText);
+  }
+}
 /** Generate documentation for all classes in a set of .ts files */
 export function generateDocumentation(
-  fileNames: string[],
-  options: ts.CompilerOptions,
-  docOptions: any = null
+  fileNames: string[], options: ts.CompilerOptions, docOptions: any = {}
 ): void {
-  const host = ts.createCompilerHost(options);
+
+  const tsOptions: ts.CompilerOptions = getTsOptions(options);
+  if(!checkFiles(fileNames, "File for compiling is not found")) return;
+  const host = ts.createCompilerHost(tsOptions);
   // Build a program using the set of root file names in fileNames
-  const program = ts.createProgram(fileNames, options, host);
+  const program = ts.createProgram(fileNames, tsOptions, host);
 
   // Get the checker, we will use it to find more about classes
   let checker = program.getTypeChecker();
-  /*
-  const errors = ts.getPreEmitDiagnostics(program);
-  if(errors.length > 0) {
-      for(var i = 0; i < errors.length; i ++) {
-        const er = errors[i];
-        //console.log(er.messageText + (!!er.file ?  + "  " + er.file.fileName : ""));
-      }
-      //console.log("Errors: " + errors.length);
-  }
-  */
   let outputClasses: DocEntry[] = [];
   let outputPMEs: DocEntry[] = [];
   let pmesHash = {};
@@ -63,11 +123,10 @@ export function generateDocumentation(
   let curClass: DocEntry = null;
   let curJsonName: string = null;
   let generateJSONDefinitionClasses = {};
-  let dtsFileName = !!docOptions ? docOptions.dtsFileName : undefined;
-  let generateDts = !!dtsFileName;
-  let generateJSONDefinition = 
-    !!docOptions && docOptions.generateJSONDefinition === true;
-  let generateDocs = !docOptions && !generateDts || (!!docOptions && docOptions.generateDoc !== false);
+  let dtsOutput = !!docOptions ? docOptions.dtsOutput : undefined;
+  let generateDts = !!dtsOutput;
+  let generateJSONDefinition = docOptions.generateJSONDefinition === true;
+  let generateDocs = !generateDts || docOptions.generateDoc !== false;
   let outputDefinition = {};
   let dtsExportsDeclarations = [];
   let dtsImports = {};
@@ -76,7 +135,6 @@ export function generateDocumentation(
   let dtsDeclarations = {};
   let dtsTypesParameters = {};
   let dtsTypesArgumentParameters = {};
-
   // Visit every sourceFile in the program
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.fileName.indexOf("node_modules") > 0) continue;
@@ -108,14 +166,11 @@ export function generateDocumentation(
   }
   if(generateDts) {
     dtsSetupExportVariables(fileNames);
-    dtsImportFiles(docOptions.dtsImports);
+    dtsImportFiles(docOptions.paths);
     prepareDtsInfo();
-    fs.writeFileSync(getAbsoluteFileName(dtsFileName), dtsGetText());
+    fs.writeFileSync(getAbsoluteFileName(dtsOutput), dtsGetText());
   }
   return;
-  function getAbsoluteFileName(name: string): string {
-    return path.join(process.cwd(), name);
-  }
 
   /** set allParentTypes */
   function setAllParentTypes(className: string) {
@@ -303,7 +358,7 @@ export function generateDocumentation(
     return null;
   }
   function getPMEType(nodeKind: ts.SyntaxKind) {
-    if (nodeKind === ts.SyntaxKind.MethodDeclaration) return "method";
+    if (nodeKind === ts.SyntaxKind.MethodDeclaration || nodeKind === ts.SyntaxKind.MethodSignature) return "method";
     if (nodeKind === ts.SyntaxKind.FunctionDeclaration) return "function";
     return "property";
   }
@@ -425,10 +480,7 @@ export function generateDocumentation(
   /** Serialize a method symbol infomration */
   function serializeMethod(symbol: ts.Symbol, node: ts.Node) {
     let details = serializeSymbol(symbol);
-    if (
-      node.kind === ts.SyntaxKind.MethodDeclaration ||
-      node.kind === ts.SyntaxKind.FunctionDeclaration
-    ) {
+    if (getPMEType(node.kind) !== "property") {
       let signature = checker.getSignatureFromDeclaration(
         <ts.SignatureDeclaration>node
       );
@@ -622,10 +674,14 @@ export function generateDocumentation(
       dtsExportsDeclarations.push(text);
     });
   }
-  function dtsImportFiles(imports: Array<any>) {
-    if(!Array.isArray(imports)) return;
-    for(var i = 0; i < imports.length; i ++) {
-      importDtsFile(imports[i].name, imports[i].file);
+  function dtsImportFiles(imports: any) {
+    if(!imports) return;
+    for(var key in imports) {
+      const arr = imports[key];
+      if(!Array.isArray(arr)) continue;
+      for(var i = 0; arr.length; i ++) {
+        importDtsFile(key, arr[i]);
+      }
     }
   }
   function importDtsFile(moduleName: string, fileName: string) {
