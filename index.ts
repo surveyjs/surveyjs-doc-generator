@@ -22,6 +22,7 @@ interface DocEntry {
   hasSet?: boolean;
   isField?: boolean;
   isOptional?: boolean;
+  isStatic?: boolean;
   jsonClassName?: string;
   isSerialized?: boolean;
   defaultValue?: any;
@@ -91,6 +92,7 @@ export function generateDts(options: IDtsBundleOptions) {
   const tsOptions: ts.CompilerOptions = {};
   if(options.paths) {
     tsOptions.paths = options.paths;
+    tsOptions.baseUrl = process.cwd();
   }
   generateDocumentation(options.entries, tsOptions, docOptions);
   if(!checkFiles([options.out], "Generated d.ts file is not found")) return;
@@ -100,7 +102,11 @@ export function generateDts(options: IDtsBundleOptions) {
   const diagnostics = program.getSyntacticDiagnostics(srcFile);
   for(var i = 0; i < diagnostics.length; i ++) {
     const msgText: any = diagnostics[i].messageText;
-    printError(!!msgText.messageText? msgText.messageText: msgText);
+    let errorText = "Error: "  + (!!msgText.messageText? msgText.messageText: msgText);
+    if(!!diagnostics[i].source) {
+      errorText += " . Source: " + diagnostics[i].source;
+    }
+    printError(errorText);
   }
 }
 /** Generate documentation for all classes in a set of .ts files */
@@ -138,8 +144,15 @@ export function generateDocumentation(
   // Visit every sourceFile in the program
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.fileName.indexOf("node_modules") > 0) continue;
+    if(isNonEnglishLocalizationFile(sourceFile.fileName)) continue;
     // Walk the tree to search for classes
     ts.forEachChild(sourceFile, visit);
+  }
+  for(var i = 0; i < fileNames.length; i ++) {
+    const sourceFile = program.getSourceFile(fileNames[i]);
+    if(!!sourceFile) {
+      ts.forEachChild(sourceFile, visit);
+    }
   }
   for (var key in classesHash) {
     setAllParentTypes(key);
@@ -165,13 +178,19 @@ export function generateDocumentation(
     );
   }
   if(generateDts) {
+    prepareDtsInfo();
     dtsSetupExportVariables(fileNames);
     dtsImportFiles(docOptions.paths);
-    prepareDtsInfo();
     fs.writeFileSync(getAbsoluteFileName(dtsOutput), dtsGetText());
   }
   return;
-
+  function isNonEnglishLocalizationFile(fileName: string): boolean {
+    const dir = path.dirname(fileName);
+    const name = path.basename(fileName);
+    if(name === "english") return false;
+    const loc = "localization";
+    return dir.lastIndexOf(loc) > dir.length - loc.length - 3;
+  }
   /** set allParentTypes */
   function setAllParentTypes(className: string) {
     if (!className) return;
@@ -424,9 +443,13 @@ export function generateDocumentation(
     const extendsType = checker.getTypeAtLocation(
       firstHeritageClauseType.expression
     );
-    if (extendsType && extendsType.symbol) 
-      return extendsType.symbol.name;
     const expression: any = firstHeritageClauseType.expression;
+    if (extendsType && extendsType.symbol) {
+      const name = extendsType.symbol.name;
+      if(!!expression.expression && expression.expression.escapedText)
+        return expression.expression.escapedText + "." + name;
+      return name;
+    }
     if(!!expression.text) return expression.text;
     if(!!expression.expression && !!expression.expression.text && !!expression.name && !!expression.name.text)
       return expression.expression.text + "." + expression.name.text;
@@ -479,14 +502,18 @@ export function generateDocumentation(
 
   /** Serialize a method symbol infomration */
   function serializeMethod(symbol: ts.Symbol, node: ts.Node) {
-    let details = serializeSymbol(symbol);
+    const details = serializeSymbol(symbol);
     if (getPMEType(node.kind) !== "property") {
       let signature = checker.getSignatureFromDeclaration(
         <ts.SignatureDeclaration>node
       );
-      let funDetails = serializeSignature(signature);
+      const funDetails = serializeSignature(signature);
       details.parameters = funDetails.parameters;
       details.returnType = funDetails.returnType;
+      const modifier = ts.getCombinedModifierFlags(node);
+      if ((modifier & ts.ModifierFlags.Static) !== 0) {
+        details.isStatic = true;
+      }
     }
     return details;
   }
@@ -668,10 +695,16 @@ export function generateDocumentation(
   }
   function dtsSetupExportVariablesPerFile(fileName: string) {
     let text: string = fs.readFileSync(getAbsoluteFileName(fileName), 'utf8');
-    const mathArray = text.match(/(export)(.*)(};)/gm);
-    if(!Array.isArray(mathArray)) return;
-    mathArray.forEach((text: string) => {
-      dtsExportsDeclarations.push(text);
+    const matchArray = text.match(/(export)(.*)(};)/gm);
+    if(!Array.isArray(matchArray)) return;
+    matchArray.forEach((text: string) => {
+      const match = text.match(/(?<={)(.*)(?=as)/g);
+      if(!!match && match.length > 0) {
+        const name = match[0].trim();
+        if(!!dtsDeclarations[name]) {
+          dtsExportsDeclarations.push(text);
+        }
+      }
     });
   }
   function dtsImportFiles(imports: any) {
@@ -679,7 +712,7 @@ export function generateDocumentation(
     for(var key in imports) {
       const arr = imports[key];
       if(!Array.isArray(arr)) continue;
-      for(var i = 0; arr.length; i ++) {
+      for(var i = 0; i < arr.length; i ++) {
         importDtsFile(key, arr[i]);
       }
     }
@@ -858,7 +891,8 @@ export function generateDocumentation(
       dtsRenderDoc(lines, member, 1);
       const returnType = dtsGetType(member.returnType);
       const parameters = dtsGetParameters(member);
-      lines.push(dtsAddSpaces() + member.name + "(" + parameters + "): " + returnType + ";");
+      const staticStr = member.isStatic ? "static " : "";
+      lines.push(dtsAddSpaces() + staticStr + member.name + "(" + parameters + "): " + returnType + ";");
     }
     if(member.pmeType === "property") {
       dtsRenderDoc(lines, member, 1);
