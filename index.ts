@@ -820,12 +820,19 @@ export function generateDocumentation(
       {regex: /(?<=export declare class)(.*)(?=extends)/gm, type: DocEntryType.classType},
       {regex: /(?<=export declare class)(.*)(?=implements)/gm, type: DocEntryType.classType},
       {regex: /(?<=export declare class)(.*)(?=<)/gm, type: DocEntryType.classType}];
+    const removedWords = [" extends ", "<"]
     for(var i = 0; i < regExStrs.length; i ++) {
       const item = regExStrs[i];
       const mathArray = text.match(item.regex);
       if(!Array.isArray(mathArray)) continue;
       mathArray.forEach((name: string) => {
         if(!!name && !!name.trim()) {
+          for(var rI = 0; rI < removedWords.length; rI ++) {
+            const index = name.indexOf(removedWords[rI]);
+            if(index > -1) {
+              name = name.substring(0, index);
+            }
+          }
           dtsImports[name.trim()] = {name: name.trim(), moduleName: moduleName, entryType: item.type};
         }
       });
@@ -924,7 +931,7 @@ export function generateDocumentation(
     if(entry.name === "default") return;
     dtsRenderDoc(lines, entry);
     let line = "export declare ";
-    line += "class " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + dtsGetTypeGeneric(entry.baseType, entry.name) + " {";
+    line += "class " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + " {";
     lines.push(line);
     dtsRenderDeclarationConstructor(lines, entry);
     dtsRenderDeclarationBody(lines, entry);
@@ -959,9 +966,10 @@ export function generateDocumentation(
     if(!entry) {
       entry = dtsImports[cur.baseType];
     }
+    const generic = dtsGetTypeGeneric(cur.baseType, cur.name)
     if(!!entry && entry.entryType === DocEntryType.interfaceType)
-      return Array.isArray(cur.members) ? " implements " + cur.baseType : "";
-    return  " extends " + cur.baseType;
+      return Array.isArray(cur.members) ? (" implements " + cur.baseType + generic) : "";
+    return  " extends " + cur.baseType + generic;
   }
   function dtsRenderDeclarationBody(lines: string[], entry: DocEntry) {
     if(!Array.isArray(entry.members)) return;
@@ -982,7 +990,7 @@ export function generateDocumentation(
     }
   }
   function dtsRenderDeclarationMember(lines: string[], member: DocEntry) {
-    const prefix = dtsAddSpaces() + (member.isStatic ? "static " : "") + (member.isProtected ? "protected " : "")
+    const prefix = dtsAddSpaces() + (member.isProtected ? "protected " : "") + (member.isStatic ? "static " : "");
     if(member.pmeType === "function" || member.pmeType === "method") {
       dtsRenderDoc(lines, member, 1);
       const returnType = dtsGetType(member.returnType);
