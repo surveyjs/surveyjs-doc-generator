@@ -81,6 +81,8 @@ function getAbsoluteFileName(name: string): string {
 export interface IDtsBundleOptions {
   entries: string[],
   out: string,
+  name: string,
+  license: string,
   paths?: ts.MapLike<string[]>
 }
 
@@ -91,7 +93,14 @@ export function generateDts(options: IDtsBundleOptions) {
   }
   let outDir = path.dirname(options.out);
   if(!checkFiles([outDir], "directory for out file is not found")) return;
-  const docOptions = {generateDoc: false, generateJSONDefinition: false, dtsOutput: options.out, paths: options.paths};
+  const docOptions = {
+    generateDoc: false,
+    generateJSONDefinition: false,
+    dtsOutput: options.out,
+    paths: options.paths,
+    name: options.name,
+    license: options.license
+  };
   const tsOptions: ts.CompilerOptions = {};
   if(options.paths) {
     tsOptions.paths = options.paths;
@@ -145,6 +154,9 @@ export function generateDocumentation(
   let dtsDeclarations = {};
   let dtsTypesParameters = {};
   let dtsTypesArgumentParameters = {};
+  let dtsProductName = docOptions.name;
+  let dtsLicense = docOptions.license;
+  let dtsVersion = "";
   // Visit every sourceFile in the program
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.fileName.indexOf("node_modules") > 0) continue;
@@ -185,7 +197,13 @@ export function generateDocumentation(
     prepareDtsInfo();
     dtsSetupExportVariables(fileNames);
     dtsImportFiles(docOptions.paths);
-    fs.writeFileSync(getAbsoluteFileName(dtsOutput), dtsGetText());
+    let text = "";
+    if(!!dtsProductName) {
+      dtsVersion = dtsGetVersion();
+      text += dtsGetBanner();
+    }
+    text += dtsGetText();
+    fs.writeFileSync(getAbsoluteFileName(dtsOutput), text);
   }
   deleteVueTSFiles();
   return;
@@ -228,7 +246,31 @@ export function generateDocumentation(
     const loc = "localization";
     return dir.lastIndexOf(loc) > dir.length - loc.length - 3;
   }
-  /** set allParentTypes */
+  function dtsGetVersion(): string {
+    const fileName = getAbsoluteFileName("package.json");
+    if(!fs.existsSync(fileName)) return "";
+    const text = fs.readFileSync(fileName, 'utf8');
+    if(!text) return "";
+    const matches = text.match(/(?<="version":)(.*)(?=,)/gm);
+    if(!Array.isArray(matches) || matches.length === 0) return "";
+    let res = matches[0];
+    if(!res) return "";
+    return res.trim().replace("\"", "").replace("\"", "");
+  }
+  function dtsGetBanner(): string {
+    const lines = [];
+    lines.push("/*");
+    const paddging = "* ";
+    lines.push(paddging + dtsProductName + (dtsVersion ? " v" + dtsVersion : ""));
+    lines.push(paddging + "Copyright (c) 2015-" + new Date().getFullYear() + " Devsoft Baltic OÜ  - https://surveyjs.io/");
+    if(dtsLicense) {
+      lines.push(paddging + "License: " + dtsLicense);
+    }
+    lines.push("*/");
+    lines.push("");
+    return lines.join("\n");
+  }
+/** set allParentTypes */
   function setAllParentTypes(className: string) {
     if (!className) return;
     var cur = classesHash[className];
