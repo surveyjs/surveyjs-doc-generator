@@ -23,6 +23,7 @@ interface DocEntry {
   isField?: boolean;
   isOptional?: boolean;
   isStatic?: boolean;
+  isProtected?: boolean;
   jsonClassName?: string;
   isSerialized?: boolean;
   defaultValue?: any;
@@ -373,6 +374,13 @@ export function generateDocumentation(
         curClass.members.push(ser);
       }
       ser.pmeType = getPMEType(node.kind);
+      const modifier = ts.getCombinedModifierFlags(node);
+      if ((modifier & ts.ModifierFlags.Static) !== 0) {
+        ser.isStatic = true;
+      }
+      if ((modifier & ts.ModifierFlags.Protected) !== 0) {
+        ser.isProtected = true;
+      }
       if(node.kind === ts.SyntaxKind.PropertySignature) {
         ser.isField = true;
         ser.isOptional = checker.isOptionalParameter(<any>node);
@@ -547,14 +555,20 @@ export function generateDocumentation(
       const funDetails = serializeSignature(signature);
       details.parameters = funDetails.parameters;
       details.returnType = funDetails.returnType;
-      const modifier = ts.getCombinedModifierFlags(node);
-      if ((modifier & ts.ModifierFlags.Static) !== 0) {
-        details.isStatic = true;
+      /* TODO Element => JSX.Element
+      for(var i = 0; i < details.parameters.length; i ++) {
+        details.parameters[i].type = getStrictMemberType(signature.parameters[i], details.parameters[i].type);
+        details.returnType = getStrictMemberType(funDetails.returnType, signature.returnType);
       }
+      */
     }
     return details;
   }
+  /*
+  function getStrictMemberType(param: ts.Node, defaultType: string): string {
 
+  }
+  */
   /** Serialize a signature (call or construct) */
   function serializeSignature(signature: ts.Signature) {
     const params = signature.parameters;
@@ -584,6 +598,7 @@ export function generateDocumentation(
   function isPMENodeExported(node: ts.Node): boolean {
     let modifier = ts.getCombinedModifierFlags(node);
     if ((modifier & ts.ModifierFlags.Public) !== 0) return true;
+    if(generateDts && (modifier & ts.ModifierFlags.Protected) !== 0) return true;
     if(node.kind === ts.SyntaxKind.PropertyDeclaration) return true;
     var parent = node.parent;
     return parent && parent.kind === ts.SyntaxKind.InterfaceDeclaration;
@@ -925,22 +940,22 @@ export function generateDocumentation(
     }
   }
   function dtsRenderDeclarationMember(lines: string[], member: DocEntry) {
+    const prefix = dtsAddSpaces() + (member.isStatic ? "static " : "") + (member.isProtected ? "protected " : "")
     if(member.pmeType === "function" || member.pmeType === "method") {
       dtsRenderDoc(lines, member, 1);
       const returnType = dtsGetType(member.returnType);
       const parameters = dtsGetParameters(member);
-      const staticStr = member.isStatic ? "static " : "";
-      lines.push(dtsAddSpaces() + staticStr + member.name + "(" + parameters + "): " + returnType + ";");
+      lines.push(prefix + member.name + "(" + parameters + "): " + returnType + ";");
     }
     if(member.pmeType === "property") {
       dtsRenderDoc(lines, member, 1);
       const propType = dtsGetType(member.type);
       if(member.isField) {
-        lines.push(dtsAddSpaces() + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
+        lines.push(prefix + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
       } else {
-        lines.push(dtsAddSpaces() + "get " + member.name + "(): " + propType + ";");
+        lines.push(prefix + "get " + member.name + "(): " + propType + ";");
         if(member.hasSet) {
-          lines.push(dtsAddSpaces() + "set " + member.name + "(val: " + propType + ");");
+          lines.push(prefix + "set " + member.name + "(val: " + propType + ");");
         }
       }
     }
