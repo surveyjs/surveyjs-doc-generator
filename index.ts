@@ -420,12 +420,16 @@ export function generateDocumentation(
       if ((modifier & ts.ModifierFlags.Protected) !== 0) {
         ser.isProtected = true;
       }
+      if(node.kind === ts.SyntaxKind.PropertyDeclaration && ser.isField === undefined) {
+        ser.isField = true;
+      }
       if(node.kind === ts.SyntaxKind.PropertySignature) {
         ser.isField = true;
         ser.isOptional = checker.isOptionalParameter(<any>node);
       }
       if (ser.type.indexOf("Event") === 0) ser.pmeType = "event";
       if (node.kind === ts.SyntaxKind.GetAccessor) {
+        ser.isField = false;
         let serSet = pmesHash[fullName];
         if (serSet) {
           ser.hasSet = serSet.hasSet;
@@ -433,7 +437,10 @@ export function generateDocumentation(
       }
       if (node.kind === ts.SyntaxKind.SetAccessor) {
         let serGet = pmesHash[fullName];
-        if (serGet) serGet.hasSet = true;
+        if (serGet) {
+           serGet.hasSet = true;
+           ser.isField = false;
+        }
         ser = null;
       }
       if (ser) {

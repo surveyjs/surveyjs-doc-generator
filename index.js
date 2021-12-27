@@ -398,6 +398,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             if ((modifier & ts.ModifierFlags.Protected) !== 0) {
                 ser.isProtected = true;
             }
+            if (node.kind === ts.SyntaxKind.PropertyDeclaration && ser.isField === undefined) {
+                ser.isField = true;
+            }
             if (node.kind === ts.SyntaxKind.PropertySignature) {
                 ser.isField = true;
                 ser.isOptional = checker.isOptionalParameter(node);
@@ -405,6 +408,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (ser.type.indexOf("Event") === 0)
                 ser.pmeType = "event";
             if (node.kind === ts.SyntaxKind.GetAccessor) {
+                ser.isField = false;
                 var serSet = pmesHash[fullName];
                 if (serSet) {
                     ser.hasSet = serSet.hasSet;
@@ -414,8 +418,10 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
             if (node.kind === ts.SyntaxKind.SetAccessor) {
                 var serGet = pmesHash[fullName];
-                if (serGet)
+                if (serGet) {
                     serGet.hasSet = true;
+                    ser.isField = false;
+                }
                 ser = null;
             }
             if (ser) {
