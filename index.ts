@@ -294,10 +294,7 @@ export function generateDocumentation(
   function visit(node: ts.Node) {
     // Only consider exported nodes
     if (!isNodeExported(node)) return;
-    if(node.kind === ts.SyntaxKind.ExportDeclaration) {
-      //const eNode: ts.ExportDeclaration = <any>node;
-      //console.log(eNode.name);
-    } else if (node.kind === ts.SyntaxKind.VariableStatement) {
+    if (node.kind === ts.SyntaxKind.VariableStatement) {
       const vsNode = <ts.VariableStatement>node;
       if(vsNode.declarationList.declarations.length > 0) {
         const varNode = vsNode.declarationList.declarations[0];
@@ -1011,7 +1008,6 @@ export function generateDocumentation(
     }
   }
   function dtsRenderDoc(lines: string[], entry: DocEntry, level: number = 0) {
-    return; //TODO
     if(!entry.documentation) return;
     const docLines = entry.documentation.split("\n");
     lines.push(dtsAddSpaces(level) + "/*");
@@ -1088,7 +1084,7 @@ export function generateDocumentation(
     for(var i = 0; i < params.length; i ++) {
       const p = params[i];
       let typeStr = dtsGetType(p.type);
-      //TODO we have Event in library core and there is Event in DOM.
+      //We have Event in library core and there is Event in DOM.
       if(typeStr === "Event") typeStr = "any";
       strs.push(p.name + (p.isOptional ? "?" : "") + ": " + typeStr);
     }
