@@ -1030,6 +1030,7 @@ export function generateDocumentation(
     }
     for(var i = 0; i < parentEntry.members.length; i ++) {
       const member = parentEntry.members[i];
+      if(member.isOptional) continue;
       if(!membersHash[member.name]) {
         members.push(member);
       }
@@ -1086,7 +1087,10 @@ export function generateDocumentation(
     const params = member.parameters;
     for(var i = 0; i < params.length; i ++) {
       const p = params[i];
-      strs.push(p.name + (p.isOptional ? "?" : "") + ": " + dtsGetType(p.type));
+      let typeStr = dtsGetType(p.type);
+      //TODO we have Event in library core and there is Event in DOM.
+      if(typeStr === "Event") typeStr = "any";
+      strs.push(p.name + (p.isOptional ? "?" : "") + ": " + typeStr);
     }
     return strs.join(", ");
   }
