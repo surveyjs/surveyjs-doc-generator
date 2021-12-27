@@ -83,6 +83,7 @@ export interface IDtsBundleOptions {
   out: string,
   name: string,
   license: string,
+  excludeImports? : boolean,
   paths?: ts.MapLike<string[]>
 }
 
@@ -97,9 +98,10 @@ export function generateDts(options: IDtsBundleOptions) {
     generateDoc: false,
     generateJSONDefinition: false,
     dtsOutput: options.out,
+    dtsExcludeImports: options.excludeImports === true,
     paths: options.paths,
     name: options.name,
-    license: options.license
+    license: options.license,
   };
   const tsOptions: ts.CompilerOptions = {};
   if(options.paths) {
@@ -149,6 +151,7 @@ export function generateDocumentation(
   let outputDefinition = {};
   let dtsExportsDeclarations = [];
   let dtsImports = {};
+  let dtsExcludeImports = docOptions.dtsExcludeImports === true;
   let dtsImportDeclarations = {};
   let dtsFrameworksImportDeclarations = {};
   let dtsDeclarations = {};
@@ -861,7 +864,7 @@ export function generateDocumentation(
     const variables = [];
 
     for(var key in dtsDeclarations) {
-      if(!!dtsImports[key]) continue;
+      if(dtsExcludeImports && !!dtsImports[key]) continue;
       const cur = dtsDeclarations[key];
       if (cur.entryType === DocEntryType.classType) {
           classes.push(cur);
@@ -935,7 +938,7 @@ export function generateDocumentation(
     if(entry.name === "default") return;
     dtsRenderDoc(lines, entry);
     let line = "export declare ";
-    line += "class " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + " {";
+    line += "class " + entry.name + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + " {";
     lines.push(line);
     dtsRenderDeclarationConstructor(lines, entry);
     dtsRenderDeclarationBody(lines, entry);

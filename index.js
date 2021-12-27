@@ -71,6 +71,7 @@ function generateDts(options) {
         generateDoc: false,
         generateJSONDefinition: false,
         dtsOutput: options.out,
+        dtsExcludeImports: options.excludeImports === true,
         paths: options.paths,
         name: options.name,
         license: options.license
@@ -123,6 +124,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     var outputDefinition = {};
     var dtsExportsDeclarations = [];
     var dtsImports = {};
+    var dtsExcludeImports = docOptions.dtsExcludeImports === true;
     var dtsImportDeclarations = {};
     var dtsFrameworksImportDeclarations = {};
     var dtsDeclarations = {};
@@ -855,7 +857,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         var interfaces = [];
         var variables = [];
         for (var key in dtsDeclarations) {
-            if (!!dtsImports[key])
+            if (dtsExcludeImports && !!dtsImports[key])
                 continue;
             var cur = dtsDeclarations[key];
             if (cur.entryType === DocEntryType.classType) {
@@ -933,7 +935,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             return;
         dtsRenderDoc(lines, entry);
         var line = "export declare ";
-        line += "class " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + " {";
+        line += "class " + entry.name + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + " {";
         lines.push(line);
         dtsRenderDeclarationConstructor(lines, entry);
         dtsRenderDeclarationBody(lines, entry);
