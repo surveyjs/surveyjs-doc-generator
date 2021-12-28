@@ -13,6 +13,7 @@ interface DocEntry {
   see?: any;
   type?: string;
   baseType?: string;
+  implements?: string[];
   allTypes?: string[];
   constructors?: DocEntry[];
   members?: DocEntry[];
@@ -24,6 +25,7 @@ interface DocEntry {
   isOptional?: boolean;
   isStatic?: boolean;
   isProtected?: boolean;
+  isPublic?: boolean;
   jsonClassName?: string;
   isSerialized?: boolean;
   defaultValue?: any;
@@ -485,10 +487,13 @@ export function generateDocumentation(
   function serializeSymbol(symbol: ts.Symbol): DocEntry {
     const type = getTypeOfSymbol(symbol);
     const docParts = symbol.getDocumentationComment();
+    const modifiedFlag = !!symbol.valueDeclaration ? ts.getCombinedModifierFlags(symbol.valueDeclaration) : 0;
+    const isPublic = (modifiedFlag & ts.ModifierFlags.Public) !== 0;
     const res = {
       name: symbol.getName(),
       documentation: !!docParts ? ts.displayPartsToString(docParts) : "",
       type: checker.typeToString(type),
+      isPublic: isPublic
     };
     var jsTags = symbol.getJsDocTags();
     if (jsTags) {
@@ -508,11 +513,12 @@ export function generateDocumentation(
   /** Serialize a class symbol information */
   function serializeClass(symbol: ts.Symbol, node: ts.Node) {
     let details = serializeSymbol(symbol);
+    details.implements = getImplementedTypes(node, details.name);
+    setTypeParameters(details.name, node);
     if(node.kind === ts.SyntaxKind.InterfaceDeclaration) {
       details.entryType = DocEntryType.interfaceType;
     }
     if (node.kind !== ts.SyntaxKind.ClassDeclaration) return details;
-    setTypeParameters(details.name, node);
     // Get the construct signatures
     let constructorType = checker.getTypeOfSymbolAtLocation(
       symbol,
@@ -522,15 +528,56 @@ export function generateDocumentation(
     details.constructors = constructorType
       .getConstructSignatures()
       .map(serializeSignature);
+    createPropertiesFromConstructors(details);
     const firstHeritageClauseType = getFirstHeritageClauseType(<ts.ClassDeclaration>node);
     details.baseType = getBaseType(firstHeritageClauseType);
     setTypeParameters(details.baseType, firstHeritageClauseType, details.name);
     return details;
   }
+  function createPropertiesFromConstructors(entry: DocEntry) {
+    if(!Array.isArray(entry.constructors)) return;
+    for(var i = 0; i < entry.constructors.length; i ++) {
+      createPropertiesFromConstructor(entry, entry.constructors[i]);
+    }
+  }
+  function createPropertiesFromConstructor(classEntry: DocEntry, entry: DocEntry) {
+    if(!Array.isArray(entry.parameters)) return;
+    for(var i = 0; i < entry.parameters.length; i ++) {
+      const param = entry.parameters[i];
+      if(!param.isPublic) continue;
+      if(!classEntry.members) classEntry.members = [];
+      classEntry.members.push(
+        { name: param.name, pmeType: "property", isField: true, isPublic: true, isOptional: param.isOptional, type: param.type}
+    );
+    }
+  }
+  function getHeritageClause(node: ts.ClassDeclaration, index: number): ts.HeritageClause {
+    if (!node || !node.heritageClauses || node.heritageClauses.length <= index) return undefined;
+    return node.heritageClauses[index];
+  }
   function getFirstHeritageClauseType(node: ts.ClassDeclaration): ts.ExpressionWithTypeArguments {
-    if (!node || !node.heritageClauses || node.heritageClauses.length < 1) return undefined;
-    const firstHeritageClause = node.heritageClauses[0];
-    return firstHeritageClause.types[0];
+    const clause = getHeritageClause(node, 0);
+    return !!clause ? clause.types[0] : undefined;
+  }
+  function getImplementedTypes(node: ts.Node, className: string): string[] {
+    if(!node || !(<ts.ClassDeclaration>node).heritageClauses) return undefined;
+    const clauses = (<ts.ClassDeclaration>node).heritageClauses;
+    if(!Array.isArray(clauses) || clauses.length == 0) return undefined;
+    const res = [];
+    for(var i = 0; i < clauses.length; i ++) {
+      getImplementedTypesForClause(res, clauses[i], className);
+    }
+    return res;
+  }
+  function getImplementedTypesForClause(res: string[], clause: ts.HeritageClause, className: string) {
+    if(!clause || !Array.isArray(clause.types)) return undefined;
+    for(var i = 0;  i < clause.types.length; i ++) {
+      const name = getBaseType(clause.types[i]);
+      if(!!name) {
+        res.push(name);
+        setTypeParameters(name, clause.types[i], className);
+      }
+    }
   }
   function getBaseType(firstHeritageClauseType: ts.ExpressionWithTypeArguments): string {
     if(!firstHeritageClauseType) return "";
@@ -647,6 +694,7 @@ export function generateDocumentation(
   function isPMENodeExported(node: ts.Node): boolean {
     let modifier = ts.getCombinedModifierFlags(node);
     if ((modifier & ts.ModifierFlags.Public) !== 0) return true;
+    if(generateDts && modifier === 0) return true;
     if(generateDts && (modifier & ts.ModifierFlags.Protected) !== 0) return true;
     if(node.kind === ts.SyntaxKind.PropertyDeclaration) return true;
     var parent = node.parent;
@@ -946,7 +994,8 @@ export function generateDocumentation(
   }
   function dtsRenderDeclarationInterface(lines: string[], entry: DocEntry) {
     dtsRenderDoc(lines, entry);
-    var line = "export interface " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + " {";
+    const impl = dtsRenderImplementedInterfaces(entry, false);
+    var line = "export interface " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + impl +  " {";
     lines.push(line);
     dtsRenderDeclarationBody(lines, entry);
     lines.push("}");
@@ -973,15 +1022,31 @@ export function generateDocumentation(
     if(!entry) {
       entry = dtsImports[cur.baseType];
     }
-    const generic = dtsGetTypeGeneric(cur.baseType, cur.name)
-    if(!!entry && entry.entryType === DocEntryType.interfaceType)
-      return Array.isArray(cur.members) ? (" implements " + cur.baseType + generic) : "";
-    return  " extends " + cur.baseType + generic;
+    const isInteface = !!entry && entry.entryType === DocEntryType.interfaceType;
+    const impl = dtsRenderImplementedInterfaces(cur, !isInteface);
+    if(isInteface)
+      return impl;
+    const generic = dtsGetTypeGeneric(cur.baseType, cur.name);
+    return  " extends " + cur.baseType + generic + impl;
+  }
+  function dtsRenderImplementedInterfaces(entry: DocEntry, isBaseClass: boolean): string {
+    if(!Array.isArray(entry.implements)) return "";
+    const impls = entry.implements;
+    if(impls.length === 0) return "";
+    const res = [];
+    for(var i = 0; i < impls.length; i ++) {
+      if(isBaseClass && impls[i] === entry.baseType) continue;
+      const generic = dtsGetTypeGeneric(impls[i], entry.name);
+      res.push(impls[i] + generic);
+    }
+    if(res.length === 0) return "";
+    const ext = entry.entryType === DocEntryType.interfaceType ?  " extends " : " implements ";
+    return ext + res.join(", ");
   }
   function dtsRenderDeclarationBody(lines: string[], entry: DocEntry) {
     if(!Array.isArray(entry.members)) return;
     const members = [].concat(entry.members);
-    dtsGetMissingMembersInClassFromInterface(entry, members);
+    //dtsGetMissingMembersInClassFromInterface(entry, members);
     for(var i = 0; i < members.length; i ++) {
       if(dtsIsPrevMemberTheSame(members, i)) continue;
       const member = members[i];
@@ -998,14 +1063,13 @@ export function generateDocumentation(
   }
   function dtsRenderDeclarationMember(lines: string[], member: DocEntry) {
     const prefix = dtsAddSpaces() + (member.isProtected ? "protected " : "") + (member.isStatic ? "static " : "");
+    dtsRenderDoc(lines, member, 1);
     if(member.pmeType === "function" || member.pmeType === "method") {
-      dtsRenderDoc(lines, member, 1);
       const returnType = dtsGetType(member.returnType);
       const parameters = dtsGetParameters(member);
       lines.push(prefix + member.name + "(" + parameters + "): " + returnType + ";");
     }
     if(member.pmeType === "property") {
-      dtsRenderDoc(lines, member, 1);
       const propType = dtsGetType(member.type);
       if(member.isField) {
         lines.push(prefix + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
@@ -1015,6 +1079,9 @@ export function generateDocumentation(
           lines.push(prefix + "set " + member.name + "(val: " + propType + ");");
         }
       }
+    }
+    if(member.pmeType === "event") {
+      lines.push(prefix + member.name + ": " + member.type + ";");
     }
   }
   function dtsRenderDoc(lines: string[], entry: DocEntry, level: number = 0) {
@@ -1026,6 +1093,7 @@ export function generateDocumentation(
     }
     lines.push(dtsAddSpaces(level) + "*/");
   }
+  //TODO remove
   function dtsGetMissingMembersInClassFromInterface(entry: DocEntry, members: Array<DocEntry>) {
     if(entry.entryType !== DocEntryType.classType || !entry.baseType) return;
     const parentEntry: DocEntry = dtsDeclarations[entry.baseType] ;
@@ -1079,6 +1147,7 @@ export function generateDocumentation(
       dtsFrameworksImportDeclarations["vue"] = "import Vue";
       return true;
     }
+    if(!dtsExcludeImports && !!dtsDeclarations[type]) return false;
     const entry = dtsImports[type];
     if(!entry) return false;
     dtsImportDeclarations[type] = entry;
