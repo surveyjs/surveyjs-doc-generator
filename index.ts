@@ -2,7 +2,7 @@ import * as ts from "typescript";
 import * as fs from "fs";
 import * as path from "path"
 
-enum DocEntryType {unknown, classType, interfaceType, functionType, variableType};
+enum DocEntryType {unknown, classType, interfaceType, functionType, variableType, enumType};
 interface DocEntry {
   name?: string;
   entryType?: DocEntryType;
@@ -19,6 +19,8 @@ interface DocEntry {
   members?: DocEntry[];
   parameters?: DocEntry[];
   returnType?: string;
+  returnTypeGenerics?: string[];
+  typeGenerics?: string[];
   pmeType?: string;
   hasSet?: boolean;
   isField?: boolean;
@@ -299,7 +301,19 @@ export function generateDocumentation(
   function visit(node: ts.Node) {
     // Only consider exported nodes
     if (!isNodeExported(node)) return;
-    if (node.kind === ts.SyntaxKind.VariableStatement) {
+    if (node.kind === ts.SyntaxKind.EnumDeclaration) {
+      const enNode = <ts.EnumDeclaration>node;
+      let symbol = checker.getSymbolAtLocation(enNode.name);
+      if (!!symbol && generateDts) {
+        visitEnumNode(enNode, symbol);
+      }
+    } else if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
+      const fnNode = <ts.FunctionDeclaration>node;
+      let symbol = checker.getSymbolAtLocation(fnNode.name);
+      if (!!symbol && generateDts) {
+        visitFunctionNode(fnNode, symbol);
+      }
+    } else if (node.kind === ts.SyntaxKind.VariableStatement) {
       const vsNode = <ts.VariableStatement>node;
       if(vsNode.declarationList.declarations.length > 0) {
         const varNode = vsNode.declarationList.declarations[0];
@@ -337,6 +351,32 @@ export function generateDocumentation(
     entry.entryType = DocEntryType.variableType;
     dtsDeclarations[entry.name] = entry;
     visitVariableProperties(entry, node);
+  }
+  function visitEnumNode(node: ts.EnumDeclaration, symbol: ts.Symbol) {
+    let modifier = ts.getCombinedModifierFlags(node);
+    if ((modifier & ts.ModifierFlags.Export) === 0) return;
+    const entry = {
+      name: symbol.name,
+      entryType: DocEntryType.enumType,
+      members: []
+    };
+    dtsDeclarations[entry.name] = entry;
+    for(var i = 0; i < node.members.length; i ++) {
+      const member = node.members[i];
+      const sym = checker.getSymbolAtLocation(member.name);
+      if(!!sym && !!sym.name) {
+        const id = !!member.initializer ? (<any>member.initializer).text : undefined;
+        entry.members.push({ name: sym.name, returnType: id});
+      }
+    }
+  }
+  function visitFunctionNode(node: ts.FunctionDeclaration, symbol: ts.Symbol) {
+    let modifier = ts.getCombinedModifierFlags(node);
+    if ((modifier & ts.ModifierFlags.Export) === 0) return;
+    const entry = serializeMethod(symbol, node);
+    if(!entry) return;
+    entry.entryType = DocEntryType.functionType;
+    dtsDeclarations[entry.name] = entry;
   }
   function visitVariableProperties(entry: DocEntry, node: ts.VariableDeclaration) {
     if(!node.initializer) return;
@@ -636,6 +676,7 @@ export function generateDocumentation(
     return " = " + first;
   }
   function getTypeParametersDeclaration(node: any, isArgument: boolean): ts.NodeArray<ts.TypeParameterDeclaration> {
+    if(!node) return undefined;
     if(!isArgument && !!node.typeParameters) return node.typeParameters;
     if(isArgument && !!node.typeArguments) return node.typeArguments;
     return undefined;
@@ -651,6 +692,8 @@ export function generateDocumentation(
       const funDetails = serializeSignature(signature);
       details.parameters = funDetails.parameters;
       details.returnType = funDetails.returnType;
+      details.typeGenerics = getTypedParameters(node, false);
+      details.returnTypeGenerics = getTypedParameters((<ts.SignatureDeclaration>node).type, true);
       /* TODO Element => JSX.Element
       for(var i = 0; i < details.parameters.length; i ++) {
         details.parameters[i].type = getStrictMemberType(signature.parameters[i], details.parameters[i].type);
@@ -909,7 +952,9 @@ export function generateDocumentation(
   function dtsRenderDeclarations(lines: string[]) {
     const classes = [];
     const interfaces = [];
+    const functions = [];
     const variables = [];
+    const enums = [];
 
     for(var key in dtsDeclarations) {
       if(dtsExcludeImports && !!dtsImports[key]) continue;
@@ -923,6 +968,12 @@ export function generateDocumentation(
       if (cur.entryType === DocEntryType.variableType) {
         variables.push(cur);
       } 
+      if (cur.entryType === DocEntryType.functionType) {
+        functions.push(cur);
+      } 
+      if (cur.entryType === DocEntryType.enumType) {
+        enums.push(cur);
+      } 
     }
     for(var i = 0; i < dtsExportsDeclarations.length; i ++) {
       lines.push(dtsExportsDeclarations[i]);
@@ -931,11 +982,17 @@ export function generateDocumentation(
       lines.push("");
     }
     dtsSortClasses(classes);
+    for (var i = 0; i < enums.length; i++) {
+      dtsRenderDeclarationEnum(lines, enums[i]);
+    }
     for (var i = 0; i < interfaces.length; i++) {
       dtsRenderDeclarationInterface(lines, interfaces[i]);
     }
     for(var i = 0; i < classes.length; i ++) {
       dtsRenderDeclarationClass(lines, classes[i]);
+    }
+    for(var i = 0; i < functions.length; i ++) {
+      dtsRenderDeclarationFunction(lines, functions[i]);
     }
     for(var i = 0; i < variables.length; i ++) {
       dtsRenderDeclarationVariable(lines, variables[i], 0);
@@ -1015,6 +1072,19 @@ export function generateDocumentation(
         lines.push(dtsAddSpaces(level) + "}" + comma);
     }
   }
+  function dtsRenderDeclarationEnum(lines: string[], entry: DocEntry) {
+    if(!Array.isArray(entry.members) || entry.members.length === 0) return;
+    lines.push("export enum " + entry.name + " {");
+    for(var i = 0; i < entry.members.length; i ++) {
+      const m = entry.members[i];
+      const comma = i < entry.members.length - 1 ? "," : "";
+      lines.push(dtsAddSpaces() + m.name + (!!m.returnType ? " = " + m.returnType : "") + comma);
+    }
+    lines.push("}")
+  }
+  function dtsRenderDeclarationFunction(lines: string[], entry: DocEntry) {
+    lines.push("export declare function " + dtsGetFunctionDeclaration(entry));
+  }
   function dtsRenderClassExtend(cur: DocEntry): string {
     if(!cur.baseType) return "";
     if(!dtsGetHasClassType(cur.baseType)) return "";
@@ -1050,7 +1120,7 @@ export function generateDocumentation(
     for(var i = 0; i < members.length; i ++) {
       if(dtsIsPrevMemberTheSame(members, i)) continue;
       const member = members[i];
-      if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
+      //if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
       dtsRenderDeclarationMember(lines, member);
     }
   }
@@ -1065,9 +1135,7 @@ export function generateDocumentation(
     const prefix = dtsAddSpaces() + (member.isProtected ? "protected " : "") + (member.isStatic ? "static " : "");
     dtsRenderDoc(lines, member, 1);
     if(member.pmeType === "function" || member.pmeType === "method") {
-      const returnType = dtsGetType(member.returnType);
-      const parameters = dtsGetParameters(member);
-      lines.push(prefix + member.name + "(" + parameters + "): " + returnType + ";");
+      lines.push(prefix + dtsGetFunctionDeclaration(member));
     }
     if(member.pmeType === "property") {
       const propType = dtsGetType(member.type);
@@ -1083,6 +1151,26 @@ export function generateDocumentation(
     if(member.pmeType === "event") {
       lines.push(prefix + member.name + ": " + member.type + ";");
     }
+  }
+  function dtsGetFunctionDeclaration(entry: DocEntry) : string {
+    let returnType = removeGenerics(entry.returnType);
+    returnType = dtsGetType(returnType);
+    if(returnType !== "any") {
+      returnType += dtsGetGenericTypes(entry.returnTypeGenerics);
+    }
+    const parameters = dtsGetParameters(entry);
+    return entry.name + dtsGetGenericTypes(entry.typeGenerics) + "(" + parameters + "): " + returnType + ";";
+  }
+  function removeGenerics(typeName: string): string {
+    if(!typeName) return typeName;
+    if(typeName[typeName.length - 1] !== ">") return typeName;
+    const index = typeName.indexOf("<");
+    if(index < 0) return typeName;
+    return typeName.substring(0, index);
+  }
+  function dtsGetGenericTypes(generic: string[]): string {
+    if(!Array.isArray(generic) || generic.length === 0) return "";
+    return "<" + generic.join(", ") + ">";
   }
   function dtsRenderDoc(lines: string[], entry: DocEntry, level: number = 0) {
     if(!entry.documentation) return;
@@ -1112,6 +1200,7 @@ export function generateDocumentation(
   }
   function dtsGetType(type: string): string {
     if(!type) return "void";
+    if(type === "T") return type;
     if(type.indexOf("|") > -1) {
       return type.indexOf("(") > -1 ? "any" : type;
     }

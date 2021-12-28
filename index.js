@@ -11,6 +11,7 @@ var DocEntryType;
     DocEntryType[DocEntryType["interfaceType"] = 2] = "interfaceType";
     DocEntryType[DocEntryType["functionType"] = 3] = "functionType";
     DocEntryType[DocEntryType["variableType"] = 4] = "variableType";
+    DocEntryType[DocEntryType["enumType"] = 5] = "enumType";
 })(DocEntryType || (DocEntryType = {}));
 ;
 var jsonObjMetaData = null;
@@ -276,7 +277,21 @@ function generateDocumentation(fileNames, options, docOptions) {
         // Only consider exported nodes
         if (!isNodeExported(node))
             return;
-        if (node.kind === ts.SyntaxKind.VariableStatement) {
+        if (node.kind === ts.SyntaxKind.EnumDeclaration) {
+            var enNode = node;
+            var symbol = checker.getSymbolAtLocation(enNode.name);
+            if (!!symbol && generateDts) {
+                visitEnumNode(enNode, symbol);
+            }
+        }
+        else if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
+            var fnNode = node;
+            var symbol = checker.getSymbolAtLocation(fnNode.name);
+            if (!!symbol && generateDts) {
+                visitFunctionNode(fnNode, symbol);
+            }
+        }
+        else if (node.kind === ts.SyntaxKind.VariableStatement) {
             var vsNode = node;
             if (vsNode.declarationList.declarations.length > 0) {
                 var varNode = vsNode.declarationList.declarations[0];
@@ -312,6 +327,35 @@ function generateDocumentation(fileNames, options, docOptions) {
         entry.entryType = DocEntryType.variableType;
         dtsDeclarations[entry.name] = entry;
         visitVariableProperties(entry, node);
+    }
+    function visitEnumNode(node, symbol) {
+        var modifier = ts.getCombinedModifierFlags(node);
+        if ((modifier & ts.ModifierFlags.Export) === 0)
+            return;
+        var entry = {
+            name: symbol.name,
+            entryType: DocEntryType.enumType,
+            members: []
+        };
+        dtsDeclarations[entry.name] = entry;
+        for (var i = 0; i < node.members.length; i++) {
+            var member = node.members[i];
+            var sym = checker.getSymbolAtLocation(member.name);
+            if (!!sym && !!sym.name) {
+                var id = !!member.initializer ? member.initializer.text : undefined;
+                entry.members.push({ name: sym.name, returnType: id });
+            }
+        }
+    }
+    function visitFunctionNode(node, symbol) {
+        var modifier = ts.getCombinedModifierFlags(node);
+        if ((modifier & ts.ModifierFlags.Export) === 0)
+            return;
+        var entry = serializeMethod(symbol, node);
+        if (!entry)
+            return;
+        entry.entryType = DocEntryType.functionType;
+        dtsDeclarations[entry.name] = entry;
     }
     function visitVariableProperties(entry, node) {
         if (!node.initializer)
@@ -627,6 +671,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         return " = " + first;
     }
     function getTypeParametersDeclaration(node, isArgument) {
+        if (!node)
+            return undefined;
         if (!isArgument && !!node.typeParameters)
             return node.typeParameters;
         if (isArgument && !!node.typeArguments)
@@ -641,6 +687,8 @@ function generateDocumentation(fileNames, options, docOptions) {
             var funDetails = serializeSignature(signature);
             details.parameters = funDetails.parameters;
             details.returnType = funDetails.returnType;
+            details.typeGenerics = getTypedParameters(node, false);
+            details.returnTypeGenerics = getTypedParameters(node.type, true);
             /* TODO Element => JSX.Element
             for(var i = 0; i < details.parameters.length; i ++) {
               details.parameters[i].type = getStrictMemberType(signature.parameters[i], details.parameters[i].type);
@@ -907,7 +955,9 @@ function generateDocumentation(fileNames, options, docOptions) {
     function dtsRenderDeclarations(lines) {
         var classes = [];
         var interfaces = [];
+        var functions = [];
         var variables = [];
+        var enums = [];
         for (var key in dtsDeclarations) {
             if (dtsExcludeImports && !!dtsImports[key])
                 continue;
@@ -921,6 +971,12 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (cur.entryType === DocEntryType.variableType) {
                 variables.push(cur);
             }
+            if (cur.entryType === DocEntryType.functionType) {
+                functions.push(cur);
+            }
+            if (cur.entryType === DocEntryType.enumType) {
+                enums.push(cur);
+            }
         }
         for (var i = 0; i < dtsExportsDeclarations.length; i++) {
             lines.push(dtsExportsDeclarations[i]);
@@ -929,11 +985,17 @@ function generateDocumentation(fileNames, options, docOptions) {
             lines.push("");
         }
         dtsSortClasses(classes);
+        for (var i = 0; i < enums.length; i++) {
+            dtsRenderDeclarationEnum(lines, enums[i]);
+        }
         for (var i = 0; i < interfaces.length; i++) {
             dtsRenderDeclarationInterface(lines, interfaces[i]);
         }
         for (var i = 0; i < classes.length; i++) {
             dtsRenderDeclarationClass(lines, classes[i]);
+        }
+        for (var i = 0; i < functions.length; i++) {
+            dtsRenderDeclarationFunction(lines, functions[i]);
         }
         for (var i = 0; i < variables.length; i++) {
             dtsRenderDeclarationVariable(lines, variables[i], 0);
@@ -1017,6 +1079,20 @@ function generateDocumentation(fileNames, options, docOptions) {
             lines.push(dtsAddSpaces(level) + "}" + comma);
         }
     }
+    function dtsRenderDeclarationEnum(lines, entry) {
+        if (!Array.isArray(entry.members) || entry.members.length === 0)
+            return;
+        lines.push("export enum " + entry.name + " {");
+        for (var i = 0; i < entry.members.length; i++) {
+            var m = entry.members[i];
+            var comma = i < entry.members.length - 1 ? "," : "";
+            lines.push(dtsAddSpaces() + m.name + (!!m.returnType ? " = " + m.returnType : "") + comma);
+        }
+        lines.push("}");
+    }
+    function dtsRenderDeclarationFunction(lines, entry) {
+        lines.push("export declare function " + dtsGetFunctionDeclaration(entry));
+    }
     function dtsRenderClassExtend(cur) {
         if (!cur.baseType)
             return "";
@@ -1060,8 +1136,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (dtsIsPrevMemberTheSame(members, i))
                 continue;
             var member = members[i];
-            if (dtsHasMemberInBaseClasses(entry, member.name))
-                continue;
+            //if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
             dtsRenderDeclarationMember(lines, member);
         }
     }
@@ -1077,9 +1152,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         var prefix = dtsAddSpaces() + (member.isProtected ? "protected " : "") + (member.isStatic ? "static " : "");
         dtsRenderDoc(lines, member, 1);
         if (member.pmeType === "function" || member.pmeType === "method") {
-            var returnType = dtsGetType(member.returnType);
-            var parameters = dtsGetParameters(member);
-            lines.push(prefix + member.name + "(" + parameters + "): " + returnType + ";");
+            lines.push(prefix + dtsGetFunctionDeclaration(member));
         }
         if (member.pmeType === "property") {
             var propType = dtsGetType(member.type);
@@ -1096,6 +1169,30 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (member.pmeType === "event") {
             lines.push(prefix + member.name + ": " + member.type + ";");
         }
+    }
+    function dtsGetFunctionDeclaration(entry) {
+        var returnType = removeGenerics(entry.returnType);
+        returnType = dtsGetType(returnType);
+        if (returnType !== "any") {
+            returnType += dtsGetGenericTypes(entry.returnTypeGenerics);
+        }
+        var parameters = dtsGetParameters(entry);
+        return entry.name + dtsGetGenericTypes(entry.typeGenerics) + "(" + parameters + "): " + returnType + ";";
+    }
+    function removeGenerics(typeName) {
+        if (!typeName)
+            return typeName;
+        if (typeName[typeName.length - 1] !== ">")
+            return typeName;
+        var index = typeName.indexOf("<");
+        if (index < 0)
+            return typeName;
+        return typeName.substring(0, index);
+    }
+    function dtsGetGenericTypes(generic) {
+        if (!Array.isArray(generic) || generic.length === 0)
+            return "";
+        return "<" + generic.join(", ") + ">";
     }
     function dtsRenderDoc(lines, entry, level) {
         if (level === void 0) { level = 0; }
@@ -1131,6 +1228,8 @@ function generateDocumentation(fileNames, options, docOptions) {
     function dtsGetType(type) {
         if (!type)
             return "void";
+        if (type === "T")
+            return type;
         if (type.indexOf("|") > -1) {
             return type.indexOf("(") > -1 ? "any" : type;
         }
