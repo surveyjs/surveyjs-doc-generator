@@ -590,7 +590,7 @@ export function generateDocumentation(
       if(!param.isPublic) continue;
       if(!classEntry.members) classEntry.members = [];
       classEntry.members.push(
-        { name: param.name, pmeType: "property", isField: true, isPublic: true, isOptional: param.isOptional, type: param.type}
+        { name: param.name, pmeType: "property", isField: true, isPublic: true, type: param.type}
     );
     }
   }
@@ -1134,6 +1134,7 @@ export function generateDocumentation(
     for(var i = 0; i < impls.length; i ++) {
       if(isBaseClass && impls[i] === entry.baseType) continue;
       const generic = dtsGetTypeGeneric(impls[i], entry.name);
+      dtsAddImportDeclaration(impls[i]);
       res.push(impls[i] + generic);
     }
     if(res.length === 0) return "";
@@ -1143,11 +1144,9 @@ export function generateDocumentation(
   function dtsRenderDeclarationBody(lines: string[], entry: DocEntry) {
     if(!Array.isArray(entry.members)) return;
     const members = [].concat(entry.members);
-    //dtsGetMissingMembersInClassFromInterface(entry, members);
     for(var i = 0; i < members.length; i ++) {
       if(dtsIsPrevMemberTheSame(members, i)) continue;
       const member: DocEntry = members[i];
-      //if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
       dtsRenderDeclarationMember(lines, member);
       if(member.isLocalizable) {
         const name = "loc" + member.name[0].toUpperCase() + member.name.substring(1);
@@ -1174,11 +1173,14 @@ export function generateDocumentation(
   function dtsRenderDeclarationMember(lines: string[], member: DocEntry) {
     const prefix = dtsAddSpaces() + (member.isProtected ? "protected " : "") + (member.isStatic ? "static " : "");
     dtsRenderDoc(lines, member, 1);
+    let importType = "";
     if(member.pmeType === "function" || member.pmeType === "method") {
+      importType = member.returnType;
       lines.push(prefix + dtsGetFunctionDeclaration(member));
     }
     if(member.pmeType === "property") {
       const propType = dtsGetType(member.type);
+      importType = member.type;
       if(member.isField) {
         lines.push(prefix + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
       } else {
@@ -1189,8 +1191,10 @@ export function generateDocumentation(
       }
     }
     if(member.pmeType === "event") {
+      importType = member.type;
       lines.push(prefix + member.name + ": " + member.type + ";");
     }
+    dtsAddImportDeclaration(removeGenerics(importType));
   }
   function dtsGetFunctionDeclaration(entry: DocEntry) : string {
     let returnType = removeGenerics(entry.returnType);
@@ -1220,23 +1224,6 @@ export function generateDocumentation(
       lines.push(dtsAddSpaces(level) + "* " + docLines[i]);
     }
     lines.push(dtsAddSpaces(level) + "*/");
-  }
-  //TODO remove
-  function dtsGetMissingMembersInClassFromInterface(entry: DocEntry, members: Array<DocEntry>) {
-    if(entry.entryType !== DocEntryType.classType || !entry.baseType) return;
-    const parentEntry: DocEntry = dtsDeclarations[entry.baseType] ;
-    if(!parentEntry || parentEntry.entryType !== DocEntryType.interfaceType || !Array.isArray(parentEntry.members)) return
-    const membersHash = {};
-    for(var i = 0; i < members.length; i ++) {
-      membersHash[members[i].name] = members[i];
-    }
-    for(var i = 0; i < parentEntry.members.length; i ++) {
-      const member = parentEntry.members[i];
-      if(member.isOptional) continue;
-      if(!membersHash[member.name]) {
-        members.push(member);
-      }
-    }
   }
   function dtsGetType(type: string): string {
     if(!type) return "void";
@@ -1297,22 +1284,6 @@ export function generateDocumentation(
       strs.push(p.name + (p.isOptional ? "?" : "") + ": " + typeStr);
     }
     return strs.join(", ");
-  }
-  function dtsHasMemberInBaseClasses(entry: DocEntry, name: string): boolean {
-    if(!Array.isArray(entry.allTypes)) return false;
-    for(var i = 1; i < entry.allTypes.length; i ++) {
-      let parentEntry: DocEntry = dtsDeclarations[entry.allTypes[i]];
-      if(parentEntry.entryType === DocEntryType.interfaceType) continue;
-      if(dtsHasMember(parentEntry, name)) return true;
-    }
-    return false;
-  }
-  function dtsHasMember(entry: DocEntry, name: string): boolean {
-    if(!entry.members) return false;
-    for(var i = 0; i < entry.members.length; i ++) {
-      if(entry.members[i].name === name) return true;
-    }
-    return false;
   }
   function dtsAddSpaces(level: number = 1): string {
     let str = "";

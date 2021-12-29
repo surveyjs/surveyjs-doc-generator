@@ -573,7 +573,7 @@ function generateDocumentation(fileNames, options, docOptions) {
                 continue;
             if (!classEntry.members)
                 classEntry.members = [];
-            classEntry.members.push({ name: param.name, pmeType: "property", isField: true, isPublic: true, isOptional: param.isOptional, type: param.type });
+            classEntry.members.push({ name: param.name, pmeType: "property", isField: true, isPublic: true, type: param.type });
         }
     }
     function getHeritageClause(node, index) {
@@ -1154,6 +1154,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (isBaseClass && impls[i] === entry.baseType)
                 continue;
             var generic = dtsGetTypeGeneric(impls[i], entry.name);
+            dtsAddImportDeclaration(impls[i]);
             res.push(impls[i] + generic);
         }
         if (res.length === 0)
@@ -1165,12 +1166,10 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!Array.isArray(entry.members))
             return;
         var members = [].concat(entry.members);
-        //dtsGetMissingMembersInClassFromInterface(entry, members);
         for (var i = 0; i < members.length; i++) {
             if (dtsIsPrevMemberTheSame(members, i))
                 continue;
             var member = members[i];
-            //if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
             dtsRenderDeclarationMember(lines, member);
             if (member.isLocalizable) {
                 var name_6 = "loc" + member.name[0].toUpperCase() + member.name.substring(1);
@@ -1201,11 +1200,14 @@ function generateDocumentation(fileNames, options, docOptions) {
     function dtsRenderDeclarationMember(lines, member) {
         var prefix = dtsAddSpaces() + (member.isProtected ? "protected " : "") + (member.isStatic ? "static " : "");
         dtsRenderDoc(lines, member, 1);
+        var importType = "";
         if (member.pmeType === "function" || member.pmeType === "method") {
+            importType = member.returnType;
             lines.push(prefix + dtsGetFunctionDeclaration(member));
         }
         if (member.pmeType === "property") {
             var propType = dtsGetType(member.type);
+            importType = member.type;
             if (member.isField) {
                 lines.push(prefix + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");
             }
@@ -1217,8 +1219,10 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
         }
         if (member.pmeType === "event") {
+            importType = member.type;
             lines.push(prefix + member.name + ": " + member.type + ";");
         }
+        dtsAddImportDeclaration(removeGenerics(importType));
     }
     function dtsGetFunctionDeclaration(entry) {
         var returnType = removeGenerics(entry.returnType);
@@ -1254,26 +1258,6 @@ function generateDocumentation(fileNames, options, docOptions) {
             lines.push(dtsAddSpaces(level) + "* " + docLines[i]);
         }
         lines.push(dtsAddSpaces(level) + "*/");
-    }
-    //TODO remove
-    function dtsGetMissingMembersInClassFromInterface(entry, members) {
-        if (entry.entryType !== DocEntryType.classType || !entry.baseType)
-            return;
-        var parentEntry = dtsDeclarations[entry.baseType];
-        if (!parentEntry || parentEntry.entryType !== DocEntryType.interfaceType || !Array.isArray(parentEntry.members))
-            return;
-        var membersHash = {};
-        for (var i = 0; i < members.length; i++) {
-            membersHash[members[i].name] = members[i];
-        }
-        for (var i = 0; i < parentEntry.members.length; i++) {
-            var member = parentEntry.members[i];
-            if (member.isOptional)
-                continue;
-            if (!membersHash[member.name]) {
-                members.push(member);
-            }
-        }
     }
     function dtsGetType(type) {
         if (!type)
@@ -1347,27 +1331,6 @@ function generateDocumentation(fileNames, options, docOptions) {
             strs.push(p.name + (p.isOptional ? "?" : "") + ": " + typeStr);
         }
         return strs.join(", ");
-    }
-    function dtsHasMemberInBaseClasses(entry, name) {
-        if (!Array.isArray(entry.allTypes))
-            return false;
-        for (var i = 1; i < entry.allTypes.length; i++) {
-            var parentEntry = dtsDeclarations[entry.allTypes[i]];
-            if (parentEntry.entryType === DocEntryType.interfaceType)
-                continue;
-            if (dtsHasMember(parentEntry, name))
-                return true;
-        }
-        return false;
-    }
-    function dtsHasMember(entry, name) {
-        if (!entry.members)
-            return false;
-        for (var i = 0; i < entry.members.length; i++) {
-            if (entry.members[i].name === name)
-                return true;
-        }
-        return false;
     }
     function dtsAddSpaces(level) {
         if (level === void 0) { level = 1; }
