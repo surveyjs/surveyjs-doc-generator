@@ -426,7 +426,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (node.kind === ts.SyntaxKind.MethodSignature)
             symbol = checker.getSymbolAtLocation(node.name);
         if (symbol) {
-            var ser = serializeMethod(symbol, node);
+            var ser = serializeMember(symbol, node);
             var fullName = ser.name;
             if (curClass) {
                 ser.className = curClass.name;
@@ -444,7 +444,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             if ((modifier & ts.ModifierFlags.Protected) !== 0) {
                 ser.isProtected = true;
             }
-            if (node.kind === ts.SyntaxKind.PropertyDeclaration && ser.isField === undefined) {
+            if (node.kind === ts.SyntaxKind.PropertyDeclaration
+                && !ser.isLocalizable
+                && ser.isField === undefined) {
                 ser.isField = true;
             }
             if (node.kind === ts.SyntaxKind.PropertySignature) {
@@ -679,30 +681,62 @@ function generateDocumentation(fileNames, options, docOptions) {
             return node.typeArguments;
         return undefined;
     }
-    /** Serialize a method symbol infomration */
-    function serializeMethod(symbol, node) {
+    function serializeMember(symbol, node) {
         var details = serializeSymbol(symbol);
         if (getPMEType(node.kind) !== "property") {
-            var signature = checker.getSignatureFromDeclaration(node);
-            var funDetails = serializeSignature(signature);
-            details.parameters = funDetails.parameters;
-            details.returnType = funDetails.returnType;
-            details.typeGenerics = getTypedParameters(node, false);
-            details.returnTypeGenerics = getTypedParameters(node.type, true);
-            /* TODO Element => JSX.Element
-            for(var i = 0; i < details.parameters.length; i ++) {
-              details.parameters[i].type = getStrictMemberType(signature.parameters[i], details.parameters[i].type);
-              details.returnType = getStrictMemberType(funDetails.returnType, signature.returnType);
+            setupMethodInfo(details, symbol, node);
+        }
+        else {
+            details.isLocalizable = getIsPropertyLocalizable(node);
+            if (details.isLocalizable) {
+                details.hasSet = true;
             }
-            */
         }
         return details;
     }
-    /*
-    function getStrictMemberType(param: ts.Node, defaultType: string): string {
-  
+    /** Serialize a method symbol infomration */
+    function serializeMethod(symbol, node) {
+        var details = serializeSymbol(symbol);
+        setupMethodInfo(details, symbol, node);
+        return details;
     }
-    */
+    function setupMethodInfo(entry, symbol, node) {
+        var signature = checker.getSignatureFromDeclaration(node);
+        var funDetails = serializeSignature(signature);
+        entry.parameters = funDetails.parameters;
+        entry.returnType = funDetails.returnType;
+        entry.typeGenerics = getTypedParameters(node, false);
+        entry.returnTypeGenerics = getTypedParameters(node.type, true);
+    }
+    function getIsPropertyLocalizable(node) {
+        if (!Array.isArray(node.decorators))
+            return false;
+        for (var i = 0; i < node.decorators.length; i++) {
+            var decor = node.decorators[i];
+            var expression = decor.expression["expression"];
+            var decor_arguments = decor.expression["arguments"];
+            if (!expression || !Array.isArray(decor_arguments))
+                continue;
+            var sym = checker.getSymbolAtLocation(expression);
+            if (!sym || sym.name !== "property")
+                continue;
+            for (var j = 0; j < decor_arguments.length; j++) {
+                var arg = decor_arguments[j];
+                var props = arg["properties"];
+                if (!Array.isArray(props))
+                    continue;
+                for (var k = 0; k < props.length; k++) {
+                    var name_4 = props[k]["name"];
+                    if (!name_4)
+                        continue;
+                    var symName = checker.getSymbolAtLocation(name_4);
+                    if (!!symName && symName.name === "localizable")
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
     /** Serialize a signature (call or construct) */
     function serializeSignature(signature) {
         var params = signature.parameters;
@@ -890,8 +924,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         matchArray.forEach(function (text) {
             var match = text.match(/(?<={)(.*)(?=as)/g);
             if (!!match && match.length > 0) {
-                var name_4 = match[0].trim();
-                if (!!dtsDeclarations[name_4]) {
+                var name_5 = match[0].trim();
+                if (!!dtsDeclarations[name_5]) {
                     dtsExportsDeclarations.push(text);
                 }
             }
@@ -1138,7 +1172,23 @@ function generateDocumentation(fileNames, options, docOptions) {
             var member = members[i];
             //if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
             dtsRenderDeclarationMember(lines, member);
+            if (member.isLocalizable) {
+                var name_6 = "loc" + member.name[0].toUpperCase() + member.name.substring(1);
+                if (dtsHasMemberInEntry(entry, name_6))
+                    continue;
+                var locMember = { name: name_6, type: "LocalizableString", hasSet: false, pmeType: "property" };
+                dtsRenderDeclarationMember(lines, locMember);
+            }
         }
+    }
+    function dtsHasMemberInEntry(entry, name) {
+        if (!Array.isArray(entry.members))
+            return;
+        for (var i = 0; i < entry.members.length; i++) {
+            if (entry.members[i].name === name)
+                return true;
+        }
+        return false;
     }
     function dtsRenderDeclarationConstructor(lines, entry) {
         if (!Array.isArray(entry.constructors))

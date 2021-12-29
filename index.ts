@@ -28,6 +28,7 @@ interface DocEntry {
   isStatic?: boolean;
   isProtected?: boolean;
   isPublic?: boolean;
+  isLocalizable?: boolean;
   jsonClassName?: string;
   isSerialized?: boolean;
   defaultValue?: any;
@@ -448,7 +449,7 @@ export function generateDocumentation(
     if (node.kind === ts.SyntaxKind.MethodSignature)
       symbol = checker.getSymbolAtLocation((<ts.MethodSignature>node).name);
     if (symbol) {
-      var ser = serializeMethod(symbol, node);
+      var ser = serializeMember(symbol, node);
       let fullName = ser.name;
       if (curClass) {
         ser.className = curClass.name;
@@ -465,7 +466,9 @@ export function generateDocumentation(
       if ((modifier & ts.ModifierFlags.Protected) !== 0) {
         ser.isProtected = true;
       }
-      if(node.kind === ts.SyntaxKind.PropertyDeclaration && ser.isField === undefined) {
+      if(node.kind === ts.SyntaxKind.PropertyDeclaration 
+        && !ser.isLocalizable
+        && ser.isField === undefined) {
         ser.isField = true;
       }
       if(node.kind === ts.SyntaxKind.PropertySignature) {
@@ -681,33 +684,57 @@ export function generateDocumentation(
     if(isArgument && !!node.typeArguments) return node.typeArguments;
     return undefined;
   }
-
-  /** Serialize a method symbol infomration */
-  function serializeMethod(symbol: ts.Symbol, node: ts.Node) {
+  function serializeMember(symbol: ts.Symbol, node: ts.Node) {
     const details = serializeSymbol(symbol);
     if (getPMEType(node.kind) !== "property") {
-      let signature = checker.getSignatureFromDeclaration(
-        <ts.SignatureDeclaration>node
-      );
-      const funDetails = serializeSignature(signature);
-      details.parameters = funDetails.parameters;
-      details.returnType = funDetails.returnType;
-      details.typeGenerics = getTypedParameters(node, false);
-      details.returnTypeGenerics = getTypedParameters((<ts.SignatureDeclaration>node).type, true);
-      /* TODO Element => JSX.Element
-      for(var i = 0; i < details.parameters.length; i ++) {
-        details.parameters[i].type = getStrictMemberType(signature.parameters[i], details.parameters[i].type);
-        details.returnType = getStrictMemberType(funDetails.returnType, signature.returnType);
+      setupMethodInfo(details, symbol, node);
+    } else {
+      details.isLocalizable = getIsPropertyLocalizable(node);
+      if(details.isLocalizable) {
+        details.hasSet = true; 
       }
-      */
     }
     return details;
   }
-  /*
-  function getStrictMemberType(param: ts.Node, defaultType: string): string {
-
+  /** Serialize a method symbol infomration */
+  function serializeMethod(symbol: ts.Symbol, node: ts.Node) {
+    const details = serializeSymbol(symbol);
+    setupMethodInfo(details, symbol, node);
+    return details;
   }
-  */
+  function setupMethodInfo(entry: DocEntry, symbol: ts.Symbol, node: ts.Node) {
+    let signature = checker.getSignatureFromDeclaration(
+      <ts.SignatureDeclaration>node
+    );
+    const funDetails = serializeSignature(signature);
+    entry.parameters = funDetails.parameters;
+    entry.returnType = funDetails.returnType;
+    entry.typeGenerics = getTypedParameters(node, false);
+    entry.returnTypeGenerics = getTypedParameters((<ts.SignatureDeclaration>node).type, true);
+  }
+  function getIsPropertyLocalizable(node: ts.Node): boolean {
+    if(!Array.isArray(node.decorators)) return false;
+    for(var i = 0; i < node.decorators.length; i ++) {
+      const decor = node.decorators[i];
+      const expression = decor.expression["expression"];
+      const decor_arguments: ts.Node[] = decor.expression["arguments"];
+      if(!expression || !Array.isArray(decor_arguments)) continue;
+      const sym = checker.getSymbolAtLocation(expression);
+      if(!sym || sym.name !== "property") continue;
+      for(var j = 0; j < decor_arguments.length; j ++) {
+        const arg = decor_arguments[j];
+        const props: ts.Node[] = arg["properties"];
+        if(!Array.isArray(props)) continue;
+        for(var k = 0; k < props.length; k ++) {
+          const name: ts.Node = props[k]["name"];
+          if(!name) continue;
+          const symName = checker.getSymbolAtLocation(name);
+          if(!!symName && symName.name === "localizable") return true;
+        }
+      }
+    }
+    return false;
+  }
   /** Serialize a signature (call or construct) */
   function serializeSignature(signature: ts.Signature) {
     const params = signature.parameters;
@@ -1119,10 +1146,23 @@ export function generateDocumentation(
     //dtsGetMissingMembersInClassFromInterface(entry, members);
     for(var i = 0; i < members.length; i ++) {
       if(dtsIsPrevMemberTheSame(members, i)) continue;
-      const member = members[i];
+      const member: DocEntry = members[i];
       //if(dtsHasMemberInBaseClasses(entry, member.name)) continue;
       dtsRenderDeclarationMember(lines, member);
+      if(member.isLocalizable) {
+        const name = "loc" + member.name[0].toUpperCase() + member.name.substring(1);
+        if(dtsHasMemberInEntry(entry, name)) continue;
+        const locMember = {name: name, type: "LocalizableString", hasSet: false, pmeType: "property"};
+        dtsRenderDeclarationMember(lines, locMember);
+      }
     }
+  }
+  function dtsHasMemberInEntry(entry: DocEntry, name: string): boolean {
+    if(!Array.isArray(entry.members)) return;
+    for(var i = 0; i < entry.members.length; i ++) {
+      if(entry.members[i].name === name) return true;
+    }
+    return false;
   }
   function dtsRenderDeclarationConstructor(lines: string[], entry: DocEntry) {
     if(!Array.isArray(entry.constructors)) return;
