@@ -678,10 +678,11 @@ export function generateDocumentation(
     if(!!second) return " extends " + first + " = " + second;
     return " = " + first;
   }
-  function getTypeParametersDeclaration(node: any, isArgument: boolean): ts.NodeArray<ts.TypeParameterDeclaration> {
+  function getTypeParametersDeclaration(node: any, isArgument: boolean): Array<ts.TypeParameterDeclaration> {
     if(!node) return undefined;
     if(!isArgument && !!node.typeParameters) return node.typeParameters;
     if(isArgument && !!node.typeArguments) return node.typeArguments;
+    if(isArgument && !!node.elementType) return [<ts.TypeParameterDeclaration>node.elementType];
     return undefined;
   }
   function serializeMember(symbol: ts.Symbol, node: ts.Node) {
@@ -711,6 +712,9 @@ export function generateDocumentation(
     entry.returnType = funDetails.returnType;
     entry.typeGenerics = getTypedParameters(node, false);
     entry.returnTypeGenerics = getTypedParameters((<ts.SignatureDeclaration>node).type, true);
+    if(entry.returnType === "Array" && !entry.returnTypeGenerics) {
+      entry.returnTypeGenerics = ["any"];
+    }
   }
   function getIsPropertyLocalizable(node: ts.Node): boolean {
     if(!Array.isArray(node.decorators)) return false;
@@ -740,7 +744,7 @@ export function generateDocumentation(
     const params = signature.parameters;
     const res = {
       parameters: params.map(serializeSymbol),
-      returnType: checker.typeToString(signature.getReturnType()),
+      returnType: getReturnType(signature),
       documentation: ts.displayPartsToString(
         signature.getDocumentationComment()
       ),
@@ -753,7 +757,17 @@ export function generateDocumentation(
     }
     return res;
   }
-
+  function getReturnType(signature: ts.Signature): string {
+    var res = checker.typeToString(signature.getReturnType());
+    if(res === "{}") res = "any";
+    if(res !== "any") return res;
+    const type = signature.declaration.type;
+    if(!type) return res;
+    if(type.kind === ts.SyntaxKind.ArrayType) return "Array";
+    if(!type["typeName"]) return res;
+    const name = type["typeName"].text;
+    return !!name ? name : res;
+  }
   /** True if this is visible outside this file, false otherwise */
   function isNodeExported(node: ts.Node): boolean {
     return (
@@ -1251,6 +1265,7 @@ export function generateDocumentation(
   }
   function dtsGetHasClassType(type: string): boolean {
     if(dtsAddImportDeclaration(type)) return true;
+    if(type === "Array") return true;
     return !!dtsDeclarations[type];
   }
   function dtsAddImportDeclaration(type: string): boolean {

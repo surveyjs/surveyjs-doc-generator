@@ -679,6 +679,8 @@ function generateDocumentation(fileNames, options, docOptions) {
             return node.typeParameters;
         if (isArgument && !!node.typeArguments)
             return node.typeArguments;
+        if (isArgument && !!node.elementType)
+            return [node.elementType];
         return undefined;
     }
     function serializeMember(symbol, node) {
@@ -707,6 +709,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         entry.returnType = funDetails.returnType;
         entry.typeGenerics = getTypedParameters(node, false);
         entry.returnTypeGenerics = getTypedParameters(node.type, true);
+        if (entry.returnType === "Array" && !entry.returnTypeGenerics) {
+            entry.returnTypeGenerics = ["any"];
+        }
     }
     function getIsPropertyLocalizable(node) {
         if (!Array.isArray(node.decorators))
@@ -742,7 +747,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         var params = signature.parameters;
         var res = {
             parameters: params.map(serializeSymbol),
-            returnType: checker.typeToString(signature.getReturnType()),
+            returnType: getReturnType(signature),
             documentation: ts.displayPartsToString(signature.getDocumentationComment())
         };
         for (var i = 0; i < params.length; i++) {
@@ -752,6 +757,22 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
         }
         return res;
+    }
+    function getReturnType(signature) {
+        var res = checker.typeToString(signature.getReturnType());
+        if (res === "{}")
+            res = "any";
+        if (res !== "any")
+            return res;
+        var type = signature.declaration.type;
+        if (!type)
+            return res;
+        if (type.kind === ts.SyntaxKind.ArrayType)
+            return "Array";
+        if (!type["typeName"])
+            return res;
+        var name = type["typeName"].text;
+        return !!name ? name : res;
     }
     /** True if this is visible outside this file, false otherwise */
     function isNodeExported(node) {
@@ -1292,6 +1313,8 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
     function dtsGetHasClassType(type) {
         if (dtsAddImportDeclaration(type))
+            return true;
+        if (type === "Array")
             return true;
         return !!dtsDeclarations[type];
     }
