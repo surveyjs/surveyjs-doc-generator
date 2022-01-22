@@ -568,14 +568,21 @@ export function generateDocumentation(
       symbol.valueDeclaration
     );
     details.entryType = DocEntryType.classType;
-    details.constructors = constructorType
-      .getConstructSignatures()
-      .map(serializeSignature);
+    details.constructors = getConstructors(constructorType);
     createPropertiesFromConstructors(details);
     const firstHeritageClauseType = getFirstHeritageClauseType(<ts.ClassDeclaration>node);
     details.baseType = getBaseType(firstHeritageClauseType);
     setTypeParameters(details.baseType, firstHeritageClauseType, details.name);
     return details;
+  }
+  function getConstructors(constructorType: ts.Type): DocEntry[] {
+    const res = [];
+    const signitures = constructorType.getConstructSignatures();
+    for(var i = 0; i < signitures.length; i ++) {
+      if(!signitures[i].declaration) continue;
+      res.push(serializeSignature(signitures[i]));
+    }
+    return res;
   }
   function createPropertiesFromConstructors(entry: DocEntry) {
     if(!Array.isArray(entry.constructors)) return;

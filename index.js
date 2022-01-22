@@ -548,14 +548,22 @@ function generateDocumentation(fileNames, options, docOptions) {
         // Get the construct signatures
         var constructorType = checker.getTypeOfSymbolAtLocation(symbol, symbol.valueDeclaration);
         details.entryType = DocEntryType.classType;
-        details.constructors = constructorType
-            .getConstructSignatures()
-            .map(serializeSignature);
+        details.constructors = getConstructors(constructorType);
         createPropertiesFromConstructors(details);
         var firstHeritageClauseType = getFirstHeritageClauseType(node);
         details.baseType = getBaseType(firstHeritageClauseType);
         setTypeParameters(details.baseType, firstHeritageClauseType, details.name);
         return details;
+    }
+    function getConstructors(constructorType) {
+        var res = [];
+        var signitures = constructorType.getConstructSignatures();
+        for (var i = 0; i < signitures.length; i++) {
+            if (!signitures[i].declaration)
+                continue;
+            res.push(serializeSignature(signitures[i]));
+        }
+        return res;
     }
     function createPropertiesFromConstructors(entry) {
         if (!Array.isArray(entry.constructors))
