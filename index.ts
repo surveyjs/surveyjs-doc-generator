@@ -962,6 +962,7 @@ export function generateDocumentation(
     let text: string = fs.readFileSync(getAbsoluteFileName(fileName), 'utf8');
     const regExStrs = [{regex: /(?<=export interface)(.*)(?={)/gm, type: DocEntryType.interfaceType}, 
       {regex: /(?<=export declare var)(.*)(?=:)/gm, type: DocEntryType.variableType}, 
+      {regex: /(?<=export declare function)(.*)(?=\()/gm, type: DocEntryType.functionType},
       {regex: /(?<=export declare class)(.*)(?={)/gm, type: DocEntryType.classType}, 
       {regex: /(?<=export declare class)(.*)(?=extends)/gm, type: DocEntryType.classType},
       {regex: /(?<=export declare class)(.*)(?=implements)/gm, type: DocEntryType.classType},
