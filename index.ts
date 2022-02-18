@@ -155,6 +155,7 @@ export function generateDocumentation(
   let generateDocs = !generateDts || docOptions.generateDoc !== false;
   let outputDefinition = {};
   let dtsExportsDeclarations = [];
+  let dtsExportAsClasses = [];
   let dtsImports = {};
   let dtsExcludeImports = docOptions.dtsExcludeImports === true;
   let dtsImportDeclarations = {};
@@ -345,6 +346,20 @@ export function generateDocumentation(
     } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
       // This is a namespace, visit its children
       ts.forEachChild(node, visit);
+    } else if(node.kind === ts.SyntaxKind.ExportDeclaration) {
+      visitExportDeclarationNode(<ts.ExportDeclaration>node);
+    }
+  }
+  function visitExportDeclarationNode(node: ts.ExportDeclaration) {
+    if(!node.exportClause || !node.moduleSpecifier) return;
+    const els = node.exportClause.elements;
+    if(!Array.isArray(els)) return;
+    for(var i = 0; i < els.length; i ++) {
+      const el = els[i];
+      if(!el.propertyName || !el.name) continue;
+      if(!!el.propertyName.text && !!el.name.text) {
+        dtsExportAsClasses.push({name: el.name.text, className: el.propertyName.text});
+      }
     }
   }
   function visitVariableNode(node: ts.VariableDeclaration, symbol: ts.Symbol) {
@@ -1027,7 +1042,11 @@ export function generateDocumentation(
     for(var i = 0; i < dtsExportsDeclarations.length; i ++) {
       lines.push(dtsExportsDeclarations[i]);
     }
-    if(dtsExportsDeclarations.length > 0) {
+    for(var i = 0; i < dtsExportAsClasses.length; i ++) {
+      const entry = dtsExportAsClasses[i];
+      lines.push("export { " + entry.className + " as " + entry.name + " };");
+    }
+    if(dtsExportsDeclarations.length > 0 || dtsExportAsClasses.length > 0) {
       lines.push("");
     }
     dtsSortClasses(classes);
