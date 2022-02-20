@@ -123,10 +123,14 @@ function generateDocumentation(fileNames, options, docOptions) {
     var generateJSONDefinition = docOptions.generateJSONDefinition === true;
     var generateDocs = !generateDts || docOptions.generateDoc !== false;
     var outputDefinition = {};
-    var dtsExportsDeclarations = [];
-    var dtsExportAsClasses = [];
+    var dtsExportClassesFromLibraries = [];
     var dtsImports = {};
     var dtsExcludeImports = docOptions.dtsExcludeImports === true;
+    var dtsExportNames = [];
+    if (!!docOptions.paths) {
+        for (key in docOptions.paths)
+            dtsExportNames.push(key);
+    }
     var dtsImportDeclarations = {};
     var dtsFrameworksImportDeclarations = {};
     var dtsDeclarations = {};
@@ -167,7 +171,6 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
     if (generateDts) {
         prepareDtsInfo();
-        dtsSetupExportVariables(fileNames);
         dtsImportFiles(docOptions.paths);
         var text = "";
         if (!!dtsProductName) {
@@ -327,19 +330,46 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function visitExportDeclarationNode(node) {
-        if (!node.exportClause || !node.moduleSpecifier)
+        if (!node.exportClause)
+            return;
+        if (isExportFromDtsFile(node))
             return;
         var els = node.exportClause.elements;
         if (!Array.isArray(els))
             return;
+        var exportLibrary = getExportLibraryName(node);
         for (var i = 0; i < els.length; i++) {
             var el = els[i];
-            if (!el.propertyName || !el.name)
+            if (!el.name || !el.propertyName && !exportLibrary)
                 continue;
-            if (!!el.propertyName.text && !!el.name.text) {
-                dtsExportAsClasses.push({ name: el.name.text, className: el.propertyName.text });
+            var name_1 = el.name.text;
+            if (!name_1)
+                continue;
+            if (!exportLibrary && dtsImportDeclarations[name_1])
+                continue;
+            var entry = { name: name_1 };
+            if (!!el.propertyName) {
+                entry.className = el.propertyName.text;
             }
+            if (!!exportLibrary) {
+                entry.fileName = exportLibrary;
+            }
+            dtsExportClassesFromLibraries.push(entry);
         }
+    }
+    function isExportFromDtsFile(node) {
+        if (!node.parent)
+            return false;
+        var file = node.parent.getSourceFile();
+        if (!file)
+            return false;
+        return file.fileName.indexOf(".d.ts") > -1;
+    }
+    function getExportLibraryName(node) {
+        var name = !!node.moduleSpecifier ? node.moduleSpecifier.text : undefined;
+        if (!name)
+            return undefined;
+        return dtsExportNames.indexOf(name) > -1 ? name : undefined;
     }
     function visitVariableNode(node, symbol) {
         var entry = serializeSymbol(symbol);
@@ -531,7 +561,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     /** Serialize a symbol into a json object */
     function serializeSymbol(symbol) {
         var type = getTypeOfSymbol(symbol);
-        var docParts = symbol.getDocumentationComment();
+        var docParts = symbol.getDocumentationComment(undefined);
         var modifiedFlag = !!symbol.valueDeclaration ? ts.getCombinedModifierFlags(symbol.valueDeclaration) : 0;
         var isPublic = (modifiedFlag & ts.ModifierFlags.Public) !== 0;
         var res = {
@@ -628,10 +658,10 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!clause || !Array.isArray(clause.types))
             return undefined;
         for (var i = 0; i < clause.types.length; i++) {
-            var name_1 = getBaseType(clause.types[i]);
-            if (!!name_1) {
-                res.push(name_1);
-                setTypeParameters(name_1, clause.types[i], className);
+            var name_2 = getBaseType(clause.types[i]);
+            if (!!name_2) {
+                res.push(name_2);
+                setTypeParameters(name_2, clause.types[i], className);
             }
         }
     }
@@ -641,10 +671,10 @@ function generateDocumentation(fileNames, options, docOptions) {
         var extendsType = checker.getTypeAtLocation(firstHeritageClauseType.expression);
         var expression = firstHeritageClauseType.expression;
         if (extendsType && extendsType.symbol) {
-            var name_2 = extendsType.symbol.name;
+            var name_3 = extendsType.symbol.name;
             if (!!expression.expression && expression.expression.escapedText)
-                return expression.expression.escapedText + "." + name_2;
-            return name_2;
+                return expression.expression.escapedText + "." + name_3;
+            return name_3;
         }
         if (!!expression.text)
             return expression.text;
@@ -676,9 +706,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             return undefined;
         var res = [];
         for (var i = 0; i < params.length; i++) {
-            var name_3 = getTypeParameterName(params[i], isArgument);
+            var name_4 = getTypeParameterName(params[i], isArgument);
             var extendsType = getTypeParameterConstrains(params[i]);
-            res.push(name_3 + extendsType);
+            res.push(name_4 + extendsType);
         }
         return res.length > 0 ? res : undefined;
     }
@@ -758,10 +788,10 @@ function generateDocumentation(fileNames, options, docOptions) {
                 if (!Array.isArray(props))
                     continue;
                 for (var k = 0; k < props.length; k++) {
-                    var name_4 = props[k]["name"];
-                    if (!name_4)
+                    var name_5 = props[k]["name"];
+                    if (!name_5)
                         continue;
-                    var symName = checker.getSymbolAtLocation(name_4);
+                    var symName = checker.getSymbolAtLocation(name_5);
                     if (!!symName && symName.name === "localizable")
                         return true;
                 }
@@ -775,7 +805,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         var res = {
             parameters: params.map(serializeSymbol),
             returnType: getReturnType(signature),
-            documentation: ts.displayPartsToString(signature.getDocumentationComment())
+            documentation: ts.displayPartsToString(signature.getDocumentationComment(undefined))
         };
         for (var i = 0; i < params.length; i++) {
             var node = params[i].valueDeclaration;
@@ -821,7 +851,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
     /** True if there is a comment before declaration */
     function isSymbolHasComments(symbol) {
-        var com = symbol.getDocumentationComment();
+        var com = symbol.getDocumentationComment(undefined);
         return com && com.length > 0;
     }
     function addClassIntoJSONDefinition(className, isRoot) {
@@ -958,27 +988,6 @@ function generateDocumentation(fileNames, options, docOptions) {
             return type;
         return { $href: "#" + curClass.jsonName };
     }
-    function dtsSetupExportVariables(fileNames) {
-        for (var i = 0; i < fileNames.length; i++) {
-            var fn = fileNames[i];
-            var text = fs.readFileSync(getAbsoluteFileName(fn), 'utf8');
-            dtsSetupExportVariablesFromText(text);
-        }
-    }
-    function dtsSetupExportVariablesFromText(text) {
-        var matchArray = text.match(/(export)(.*)(};)/gm);
-        if (!Array.isArray(matchArray))
-            return;
-        matchArray.forEach(function (text) {
-            var match = text.match(/(?<={)(.*)(?=as)/g);
-            if (!!match && match.length > 0) {
-                var name_5 = match[0].trim();
-                if (!!dtsDeclarations[name_5]) {
-                    dtsExportsDeclarations.push(text);
-                }
-            }
-        });
-    }
     function dtsImportFiles(imports) {
         if (!imports)
             return;
@@ -1061,14 +1070,10 @@ function generateDocumentation(fileNames, options, docOptions) {
                 enums.push(cur);
             }
         }
-        for (var i = 0; i < dtsExportsDeclarations.length; i++) {
-            lines.push(dtsExportsDeclarations[i]);
+        for (var i = 0; i < dtsExportClassesFromLibraries.length; i++) {
+            dtsRenderExportClassFromLibraries(lines, dtsExportClassesFromLibraries[i]);
         }
-        for (var i = 0; i < dtsExportAsClasses.length; i++) {
-            var entry = dtsExportAsClasses[i];
-            lines.push("export { " + entry.className + " as " + entry.name + " };");
-        }
-        if (dtsExportsDeclarations.length > 0 || dtsExportAsClasses.length > 0) {
+        if (dtsExportClassesFromLibraries.length > 0) {
             lines.push("");
         }
         dtsSortClasses(classes);
@@ -1130,6 +1135,18 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var i_1 = importLines.length - 1; i_1 >= 0; i_1--) {
             lines.unshift(importLines[i_1]);
         }
+    }
+    function dtsRenderExportClassFromLibraries(lines, entry) {
+        var str = "export { ";
+        if (!!entry.className) {
+            str += entry.className + " as ";
+        }
+        str += entry.name + " }";
+        if (!!entry.fileName) {
+            str += " from \"" + entry.fileName + "\"";
+        }
+        str += ";";
+        lines.push(str);
     }
     function dtsRenderDeclarationClass(lines, entry) {
         if (entry.name === "default")
