@@ -154,6 +154,7 @@ export function generateDocumentation(
   let generateJSONDefinition = docOptions.generateJSONDefinition === true;
   let generateDocs = !generateDts || docOptions.generateDoc !== false;
   let outputDefinition = {};
+  let dtsExportedClasses = {}
   let dtsExportClassesFromLibraries = [];
   let dtsImports = {};
   let dtsExcludeImports = docOptions.dtsExcludeImports === true;
@@ -1107,6 +1108,8 @@ export function generateDocumentation(
     }
   }
   function dtsRenderExportClassFromLibraries(lines: string[], entry: DocEntry) {
+    if(!!dtsExportedClasses[entry.name]) return;
+    dtsExportedClasses[entry.name] = true;
     let str = "export { "
     if(!!entry.className) {
       str += entry.className + " as ";

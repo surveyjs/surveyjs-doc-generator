@@ -123,6 +123,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     var generateJSONDefinition = docOptions.generateJSONDefinition === true;
     var generateDocs = !generateDts || docOptions.generateDoc !== false;
     var outputDefinition = {};
+    var dtsExportedClasses = {};
     var dtsExportClassesFromLibraries = [];
     var dtsImports = {};
     var dtsExcludeImports = docOptions.dtsExcludeImports === true;
@@ -1137,6 +1138,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function dtsRenderExportClassFromLibraries(lines, entry) {
+        if (!!dtsExportedClasses[entry.name])
+            return;
+        dtsExportedClasses[entry.name] = true;
         var str = "export { ";
         if (!!entry.className) {
             str += entry.className + " as ";

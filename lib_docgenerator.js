@@ -5,6 +5,18 @@ var doc = require("./index.js");
 
 //doc.setJsonObj(Survey.JsonObject.metaData);
 doc.generateDts({ 
+  entries: ["./src/entries/knockout-ui.ts"],
+  out: "./build/survey-knockout-ui/survey-knockout-ui.d.ts",
+  name: "Type definition for Survey JavaScript library for Knockout (without core)",
+  license: "MIT (http://www.opensource.org/licenses/mit-license.php)",
+  excludeImports: true,
+  paths: {
+    "survey-core": ["./build/survey-core/survey.core.d.ts"],
+  }    
+})
+
+/*
+doc.generateDts({ 
   entries: ["../survey-creator-core/src/entries/index.ts", "./src/entries/index.ts"],
   out: "./build/survey-creator-knockout.d.ts",
   name: "Type definition for Survey Creator library for Knockout",
@@ -15,7 +27,7 @@ doc.generateDts({
   }    
 }
 );
-
+*/
 /*
 doc.generateDts({ 
   entries: ["./src/entries/index.ts"],
