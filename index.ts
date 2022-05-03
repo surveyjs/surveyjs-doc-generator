@@ -467,7 +467,6 @@ export function generateDocumentation(
     }
   }
   function visitClassNode(node: ts.Node) {
-    if (!isPMENodeExported(node)) return;
     var symbol = null;
     if (node.kind === ts.SyntaxKind.MethodDeclaration)
       symbol = checker.getSymbolAtLocation((<ts.MethodDeclaration>node).name);
@@ -487,59 +486,57 @@ export function generateDocumentation(
       symbol = checker.getSymbolAtLocation((<ts.PropertySignature>node).name);
     if (node.kind === ts.SyntaxKind.MethodSignature)
       symbol = checker.getSymbolAtLocation((<ts.MethodSignature>node).name);
-    if (symbol) {
-      var ser = serializeMember(symbol, node);
-      let fullName = ser.name;
-      if (curClass) {
-        ser.className = curClass.name;
-        ser.jsonName = curClass.jsonName;
-        fullName = curClass.name + "." + fullName;
-        if(!curClass.members) curClass.members = [];
-        curClass.members.push(ser);
+    if(!symbol) return;
+    if (!isPMENodeExported(node, symbol)) return;
+    var ser = serializeMember(symbol, node);
+    let fullName = ser.name;
+    if (curClass) {
+      ser.className = curClass.name;
+      ser.jsonName = curClass.jsonName;
+      fullName = curClass.name + "." + fullName;
+      if(!curClass.members) curClass.members = [];
+      curClass.members.push(ser);
+    }
+    ser.pmeType = getPMEType(node.kind);
+    const modifier = ts.getCombinedModifierFlags(<ts.Declaration>node);
+    if ((modifier & ts.ModifierFlags.Static) !== 0) {
+      ser.isStatic = true;
+    }
+    if ((modifier & ts.ModifierFlags.Protected) !== 0) {
+      ser.isProtected = true;
+    }
+    if(node.kind === ts.SyntaxKind.PropertyDeclaration 
+      && !ser.isLocalizable
+      && ser.isField === undefined) {
+      ser.isField = true;
+    }
+    if(node.kind === ts.SyntaxKind.PropertySignature) {
+      ser.isField = true;
+      ser.isOptional = checker.isOptionalParameter(<any>node);
+    }
+    if (ser.type.indexOf("Event") === 0) ser.pmeType = "event";
+    if (node.kind === ts.SyntaxKind.GetAccessor) {
+      ser.isField = false;
+      let serSet = pmesHash[fullName];
+      if (serSet) {
+        ser.hasSet = serSet.hasSet;
+      } else ser.hasSet = false;
+    }
+    if (node.kind === ts.SyntaxKind.SetAccessor) {
+      let serGet = pmesHash[fullName];
+      if (serGet) {
+          serGet.hasSet = true;
+          ser.isField = false;
       }
-      ser.pmeType = getPMEType(node.kind);
-      const modifier = ts.getCombinedModifierFlags(<ts.Declaration>node);
-      if ((modifier & ts.ModifierFlags.Static) !== 0) {
-        ser.isStatic = true;
-      }
-      if ((modifier & ts.ModifierFlags.Protected) !== 0) {
-        ser.isProtected = true;
-      }
-      if(node.kind === ts.SyntaxKind.PropertyDeclaration 
-        && !ser.isLocalizable
-        && ser.isField === undefined) {
-        ser.isField = true;
-      }
-      if(node.kind === ts.SyntaxKind.PropertySignature) {
-        ser.isField = true;
-        ser.isOptional = checker.isOptionalParameter(<any>node);
-      }
-      if (ser.type.indexOf("Event") === 0) ser.pmeType = "event";
-      if (node.kind === ts.SyntaxKind.GetAccessor) {
-        ser.isField = false;
-        let serSet = pmesHash[fullName];
-        if (serSet) {
-          ser.hasSet = serSet.hasSet;
-        } else ser.hasSet = false;
-      }
-      if (node.kind === ts.SyntaxKind.SetAccessor) {
-        let serGet = pmesHash[fullName];
-        if (serGet) {
-           serGet.hasSet = true;
-           ser.isField = false;
-        }
-        ser = null;
-      }
-      if (ser) {
-        if (!ser.parameters) ser.parameters = [];
-        pmesHash[fullName] = ser;
-        outputPMEs.push(ser);
-      }
-      if (ser && ser.name === "getType") {
-        curJsonName = getJsonTypeName(<ts.FunctionDeclaration>node);
-      }
-      if (isSymbolHasComments(symbol)) {
-      }
+      ser = null;
+    }
+    if (ser) {
+      if (!ser.parameters) ser.parameters = [];
+      pmesHash[fullName] = ser;
+      outputPMEs.push(ser);
+    }
+    if (ser && ser.name === "getType") {
+      curJsonName = getJsonTypeName(<ts.FunctionDeclaration>node);
     }
   }
   function getJsonTypeName(node: ts.FunctionDeclaration): string {
@@ -821,12 +818,21 @@ export function generateDocumentation(
       (node.parent && node.parent.kind === ts.SyntaxKind.SourceFile)
     );
   }
-  function isPMENodeExported(node: ts.Node): boolean {
+  function isPMENodeExported(node: ts.Node, symbol: ts.Symbol): boolean {
     let modifier = ts.getCombinedModifierFlags(<ts.Declaration>node);
     if ((modifier & ts.ModifierFlags.Public) !== 0) return true;
     if(generateDts && modifier === 0) return true;
     if(generateDts && (modifier & ts.ModifierFlags.Protected) !== 0) return true;
     if(node.kind === ts.SyntaxKind.PropertyDeclaration) return true;
+    if(isSymbolHasComments(symbol)) return true;
+    /*
+    let docTags = symbol.getJsDocTags();
+    if(Array.isArray(docTags) && docTags.length > 0) return true;
+    if(!!symbol.valueDeclaration) {
+      docTags = symbol.valueDeclaration["jsDoc"];
+      if(Array.isArray(docTags) && docTags.length > 0) return true;
+    }
+    */
     var parent = node.parent;
     return parent && parent.kind === ts.SyntaxKind.InterfaceDeclaration;
   }

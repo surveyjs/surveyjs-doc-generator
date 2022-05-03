@@ -458,8 +458,6 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function visitClassNode(node) {
-        if (!isPMENodeExported(node))
-            return;
         var symbol = null;
         if (node.kind === ts.SyntaxKind.MethodDeclaration)
             symbol = checker.getSymbolAtLocation(node.name);
@@ -475,64 +473,64 @@ function generateDocumentation(fileNames, options, docOptions) {
             symbol = checker.getSymbolAtLocation(node.name);
         if (node.kind === ts.SyntaxKind.MethodSignature)
             symbol = checker.getSymbolAtLocation(node.name);
-        if (symbol) {
-            var ser = serializeMember(symbol, node);
-            var fullName = ser.name;
-            if (curClass) {
-                ser.className = curClass.name;
-                ser.jsonName = curClass.jsonName;
-                fullName = curClass.name + "." + fullName;
-                if (!curClass.members)
-                    curClass.members = [];
-                curClass.members.push(ser);
+        if (!symbol)
+            return;
+        if (!isPMENodeExported(node, symbol))
+            return;
+        var ser = serializeMember(symbol, node);
+        var fullName = ser.name;
+        if (curClass) {
+            ser.className = curClass.name;
+            ser.jsonName = curClass.jsonName;
+            fullName = curClass.name + "." + fullName;
+            if (!curClass.members)
+                curClass.members = [];
+            curClass.members.push(ser);
+        }
+        ser.pmeType = getPMEType(node.kind);
+        var modifier = ts.getCombinedModifierFlags(node);
+        if ((modifier & ts.ModifierFlags.Static) !== 0) {
+            ser.isStatic = true;
+        }
+        if ((modifier & ts.ModifierFlags.Protected) !== 0) {
+            ser.isProtected = true;
+        }
+        if (node.kind === ts.SyntaxKind.PropertyDeclaration
+            && !ser.isLocalizable
+            && ser.isField === undefined) {
+            ser.isField = true;
+        }
+        if (node.kind === ts.SyntaxKind.PropertySignature) {
+            ser.isField = true;
+            ser.isOptional = checker.isOptionalParameter(node);
+        }
+        if (ser.type.indexOf("Event") === 0)
+            ser.pmeType = "event";
+        if (node.kind === ts.SyntaxKind.GetAccessor) {
+            ser.isField = false;
+            var serSet = pmesHash[fullName];
+            if (serSet) {
+                ser.hasSet = serSet.hasSet;
             }
-            ser.pmeType = getPMEType(node.kind);
-            var modifier = ts.getCombinedModifierFlags(node);
-            if ((modifier & ts.ModifierFlags.Static) !== 0) {
-                ser.isStatic = true;
-            }
-            if ((modifier & ts.ModifierFlags.Protected) !== 0) {
-                ser.isProtected = true;
-            }
-            if (node.kind === ts.SyntaxKind.PropertyDeclaration
-                && !ser.isLocalizable
-                && ser.isField === undefined) {
-                ser.isField = true;
-            }
-            if (node.kind === ts.SyntaxKind.PropertySignature) {
-                ser.isField = true;
-                ser.isOptional = checker.isOptionalParameter(node);
-            }
-            if (ser.type.indexOf("Event") === 0)
-                ser.pmeType = "event";
-            if (node.kind === ts.SyntaxKind.GetAccessor) {
+            else
+                ser.hasSet = false;
+        }
+        if (node.kind === ts.SyntaxKind.SetAccessor) {
+            var serGet = pmesHash[fullName];
+            if (serGet) {
+                serGet.hasSet = true;
                 ser.isField = false;
-                var serSet = pmesHash[fullName];
-                if (serSet) {
-                    ser.hasSet = serSet.hasSet;
-                }
-                else
-                    ser.hasSet = false;
             }
-            if (node.kind === ts.SyntaxKind.SetAccessor) {
-                var serGet = pmesHash[fullName];
-                if (serGet) {
-                    serGet.hasSet = true;
-                    ser.isField = false;
-                }
-                ser = null;
-            }
-            if (ser) {
-                if (!ser.parameters)
-                    ser.parameters = [];
-                pmesHash[fullName] = ser;
-                outputPMEs.push(ser);
-            }
-            if (ser && ser.name === "getType") {
-                curJsonName = getJsonTypeName(node);
-            }
-            if (isSymbolHasComments(symbol)) {
-            }
+            ser = null;
+        }
+        if (ser) {
+            if (!ser.parameters)
+                ser.parameters = [];
+            pmesHash[fullName] = ser;
+            outputPMEs.push(ser);
+        }
+        if (ser && ser.name === "getType") {
+            curJsonName = getJsonTypeName(node);
         }
     }
     function getJsonTypeName(node) {
@@ -837,7 +835,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         return ((node.flags & ts.NodeFlags["Export"]) !== 0 ||
             (node.parent && node.parent.kind === ts.SyntaxKind.SourceFile));
     }
-    function isPMENodeExported(node) {
+    function isPMENodeExported(node, symbol) {
         var modifier = ts.getCombinedModifierFlags(node);
         if ((modifier & ts.ModifierFlags.Public) !== 0)
             return true;
@@ -847,6 +845,16 @@ function generateDocumentation(fileNames, options, docOptions) {
             return true;
         if (node.kind === ts.SyntaxKind.PropertyDeclaration)
             return true;
+        if (isSymbolHasComments(symbol))
+            return true;
+        /*
+        let docTags = symbol.getJsDocTags();
+        if(Array.isArray(docTags) && docTags.length > 0) return true;
+        if(!!symbol.valueDeclaration) {
+          docTags = symbol.valueDeclaration["jsDoc"];
+          if(Array.isArray(docTags) && docTags.length > 0) return true;
+        }
+        */
         var parent = node.parent;
         return parent && parent.kind === ts.SyntaxKind.InterfaceDeclaration;
     }
