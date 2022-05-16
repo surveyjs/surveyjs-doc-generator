@@ -187,7 +187,14 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var i = 0; i < fileNames.length; i++) {
             var fn = fileNames[i];
             var text = fs.readFileSync(getAbsoluteFileName(fn), 'utf8');
-            generateVueTSFile(text, path.dirname(fn));
+            var dir = path.dirname(fn);
+            generateVueTSFile(text, dir);
+            var matchArray = text.match(/(?<=export \* from ")(.*)(?=";)/gm);
+            for (var i = 0; i < matchArray.length; i++) {
+                var fnChild = path.join(dir, matchArray[i] + ".ts");
+                text = fs.readFileSync(getAbsoluteFileName(fnChild), 'utf8');
+                generateVueTSFile(text, dir);
+            }
         }
     }
     function generateVueTSFile(text, dir) {

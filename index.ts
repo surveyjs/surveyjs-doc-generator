@@ -223,7 +223,14 @@ export function generateDocumentation(
     for(var i = 0; i < fileNames.length; i++) {
       const fn = fileNames[i];
       let text: string = fs.readFileSync(getAbsoluteFileName(fn), 'utf8');
-      generateVueTSFile(text, path.dirname(fn));
+      const dir = path.dirname(fn);
+      generateVueTSFile(text, dir);
+      const matchArray = text.match(/(?<=export \* from ")(.*)(?=";)/gm);
+      for (var i = 0; i < matchArray.length; i++) {
+          var fnChild = path.join(dir, matchArray[i] + ".ts");
+          text = fs.readFileSync(getAbsoluteFileName(fnChild), 'utf8');
+          generateVueTSFile(text, dir);
+      }    
     }
   }
   function generateVueTSFile(text: string, dir: string) {
