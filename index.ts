@@ -35,7 +35,8 @@ interface DocEntry {
   serializedChoices?: any[];
   moduleName?: string;
 }
-
+const callbackFuncResultStr = ") => ";
+var isExportingReact: boolean = false;
 var jsonObjMetaData: any = null;
 const tsDefaultOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES5,
@@ -1265,13 +1266,17 @@ export function generateDocumentation(
     dtsAddImportDeclaration(removeGenerics(importType));
   }
   function dtsGetFunctionDeclaration(entry: DocEntry) : string {
+    const parStr = dtsGetFunctionParametersDeclaration(entry);
+    return entry.name + dtsGetGenericTypes(entry.typeGenerics) + parStr + ";";
+  }
+  function dtsGetFunctionParametersDeclaration(entry: DocEntry, isParameter: boolean = false): string {
     let returnType = removeGenerics(entry.returnType);
     returnType = dtsGetType(returnType);
     if(returnType !== "any") {
       returnType += dtsGetGenericTypes(entry.returnTypeGenerics);
     }
     const parameters = dtsGetParameters(entry);
-    return entry.name + dtsGetGenericTypes(entry.typeGenerics) + "(" + parameters + "): " + returnType + ";";
+    return "(" + parameters + ")" + (isParameter ? " => " : ": ")  + returnType;
   }
   function removeGenerics(typeName: string): string {
     if(!typeName) return typeName;
@@ -1301,7 +1306,22 @@ export function generateDocumentation(
     }
     let str = type.replace("[", "").replace("]", "");
     if(str === "number" || str === "boolean" || str === "string" || str === "any" || str === "void") return type;
+    if(type[0] === "(" && type.indexOf(callbackFuncResultStr) > -1) return dtsGetTypeAsFunc(type);
     return dtsGetHasClassType(str) ? type : "any";
+  }
+  function dtsGetTypeAsFunc(type: string): string {
+    const index = type.indexOf(callbackFuncResultStr);
+    const entry: DocEntry = {};
+    entry.returnType = type.substring(index + callbackFuncResultStr.length);
+    const paramsStr = type.substring(1, index).split(",");
+    entry.parameters = [];
+    for(var i = 0; i < paramsStr.length; i ++) {
+      const par = paramsStr[i];
+      const parIndex = par.indexOf(":");
+      if(parIndex < 0)  return "any";
+      entry.parameters.push({name: par.substring(0, parIndex), type: par.substring(parIndex + 1)});
+    } 
+    return dtsGetFunctionParametersDeclaration(entry, true)
   }
   function dtsGetTypeGeneric(type: string, typeFor?: string): string {
     if(!type) return "";
@@ -1320,12 +1340,14 @@ export function generateDocumentation(
   function dtsGetHasClassType(type: string): boolean {
     if(dtsAddImportDeclaration(type)) return true;
     if(type === "Array") return true;
+    if(isExportingReact && type === "Element") return true;
     return !!dtsDeclarations[type];
   }
   function dtsAddImportDeclaration(type: string): boolean {
     if(!type) return false;
     if(type.indexOf("React.") === 0) {
       dtsFrameworksImportDeclarations["react"] = "import * as React";
+      isExportingReact = true;
       return true;
     }
     if(type === "Vue") {

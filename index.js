@@ -14,6 +14,8 @@ var DocEntryType;
     DocEntryType[DocEntryType["enumType"] = 5] = "enumType";
 })(DocEntryType || (DocEntryType = {}));
 ;
+var callbackFuncResultStr = ") => ";
+var isExportingReact = false;
 var jsonObjMetaData = null;
 var tsDefaultOptions = {
     target: ts.ScriptTarget.ES5,
@@ -1314,13 +1316,18 @@ function generateDocumentation(fileNames, options, docOptions) {
         dtsAddImportDeclaration(removeGenerics(importType));
     }
     function dtsGetFunctionDeclaration(entry) {
+        var parStr = dtsGetFunctionParametersDeclaration(entry);
+        return entry.name + dtsGetGenericTypes(entry.typeGenerics) + parStr + ";";
+    }
+    function dtsGetFunctionParametersDeclaration(entry, isParameter) {
+        if (isParameter === void 0) { isParameter = false; }
         var returnType = removeGenerics(entry.returnType);
         returnType = dtsGetType(returnType);
         if (returnType !== "any") {
             returnType += dtsGetGenericTypes(entry.returnTypeGenerics);
         }
         var parameters = dtsGetParameters(entry);
-        return entry.name + dtsGetGenericTypes(entry.typeGenerics) + "(" + parameters + "): " + returnType + ";";
+        return "(" + parameters + ")" + (isParameter ? " => " : ": ") + returnType;
     }
     function removeGenerics(typeName) {
         if (!typeName)
@@ -1359,7 +1366,24 @@ function generateDocumentation(fileNames, options, docOptions) {
         var str = type.replace("[", "").replace("]", "");
         if (str === "number" || str === "boolean" || str === "string" || str === "any" || str === "void")
             return type;
+        if (type[0] === "(" && type.indexOf(callbackFuncResultStr) > -1)
+            return dtsGetTypeAsFunc(type);
         return dtsGetHasClassType(str) ? type : "any";
+    }
+    function dtsGetTypeAsFunc(type) {
+        var index = type.indexOf(callbackFuncResultStr);
+        var entry = {};
+        entry.returnType = type.substring(index + callbackFuncResultStr.length);
+        var paramsStr = type.substring(1, index).split(",");
+        entry.parameters = [];
+        for (var i = 0; i < paramsStr.length; i++) {
+            var par = paramsStr[i];
+            var parIndex = par.indexOf(":");
+            if (parIndex < 0)
+                return "any";
+            entry.parameters.push({ name: par.substring(0, parIndex), type: par.substring(parIndex + 1) });
+        }
+        return dtsGetFunctionParametersDeclaration(entry, true);
     }
     function dtsGetTypeGeneric(type, typeFor) {
         if (!type)
@@ -1384,6 +1408,8 @@ function generateDocumentation(fileNames, options, docOptions) {
             return true;
         if (type === "Array")
             return true;
+        if (isExportingReact && type === "Element")
+            return true;
         return !!dtsDeclarations[type];
     }
     function dtsAddImportDeclaration(type) {
@@ -1391,6 +1417,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             return false;
         if (type.indexOf("React.") === 0) {
             dtsFrameworksImportDeclarations["react"] = "import * as React";
+            isExportingReact = true;
             return true;
         }
         if (type === "Vue") {
