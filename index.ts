@@ -1309,7 +1309,12 @@ export function generateDocumentation(
     let str = type.replace("[", "").replace("]", "");
     if(str === "number" || str === "boolean" || str === "string" || str === "any" || str === "void") return type;
     if(type[0] === "(" && type.indexOf(callbackFuncResultStr) > -1) return dtsGetTypeAsFunc(type);
-    return dtsGetHasClassType(str) ? type : "any";
+    return dtsPlatformType(str, type);
+  }
+  function dtsPlatformType(str: string, type: string): string {
+    if(!dtsGetHasClassType(str)) return "any";
+    if(isReactElement(type)) return "JSX.Element";
+    return type;
   }
   function dtsGetTypeAsFunc(type: string): string {
     const index = type.indexOf(callbackFuncResultStr);
@@ -1339,10 +1344,13 @@ export function generateDocumentation(
     }
     return "<" + params.join(", ") + ">";
   }
+  function isReactElement(type: string): boolean {
+    return isExportingReact && type === "Element";
+  }
   function dtsGetHasClassType(type: string): boolean {
     if(dtsAddImportDeclaration(type)) return true;
     if(type === "Array") return true;
-    if(isExportingReact && type === "Element") return true;
+    if(isReactElement(type)) return true;
     return !!dtsDeclarations[type];
   }
   function dtsAddImportDeclaration(type: string): boolean {

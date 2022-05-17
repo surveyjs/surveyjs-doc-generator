@@ -1371,7 +1371,14 @@ function generateDocumentation(fileNames, options, docOptions) {
             return type;
         if (type[0] === "(" && type.indexOf(callbackFuncResultStr) > -1)
             return dtsGetTypeAsFunc(type);
-        return dtsGetHasClassType(str) ? type : "any";
+        return dtsPlatformType(str, type);
+    }
+    function dtsPlatformType(str, type) {
+        if (!dtsGetHasClassType(str))
+            return "any";
+        if (isReactElement(type))
+            return "JSX.Element";
+        return type;
     }
     function dtsGetTypeAsFunc(type) {
         var index = type.indexOf(callbackFuncResultStr);
@@ -1406,12 +1413,15 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
         return "<" + params.join(", ") + ">";
     }
+    function isReactElement(type) {
+        return isExportingReact && type === "Element";
+    }
     function dtsGetHasClassType(type) {
         if (dtsAddImportDeclaration(type))
             return true;
         if (type === "Array")
             return true;
-        if (isExportingReact && type === "Element")
+        if (isReactElement(type))
             return true;
         return !!dtsDeclarations[type];
     }
