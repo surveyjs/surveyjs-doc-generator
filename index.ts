@@ -228,8 +228,10 @@ export function generateDocumentation(
       generateVueTSFile(text, dir);
       const matchArray = text.match(/(?<=export \* from ")(.*)(?=";)/gm);
       for (var i = 0; i < matchArray.length; i++) {
-          var fnChild = path.join(dir, matchArray[i] + ".ts");
-          text = fs.readFileSync(getAbsoluteFileName(fnChild), 'utf8');
+          const fnChild = path.join(dir, matchArray[i] + ".ts");
+          const absFnChild = getAbsoluteFileName(fnChild);
+          if(!fs.existsSync(absFnChild)) return;
+          text = fs.readFileSync(absFnChild, 'utf8');
           generateVueTSFile(text, dir);
       }    
     }
@@ -1319,7 +1321,7 @@ export function generateDocumentation(
       const par = paramsStr[i];
       const parIndex = par.indexOf(":");
       if(parIndex < 0)  return "any";
-      entry.parameters.push({name: par.substring(0, parIndex), type: par.substring(parIndex + 1)});
+      entry.parameters.push({name: par.substring(0, parIndex).trim(), type: par.substring(parIndex + 1).trim() });
     } 
     return dtsGetFunctionParametersDeclaration(entry, true)
   }

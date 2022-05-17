@@ -194,7 +194,10 @@ function generateDocumentation(fileNames, options, docOptions) {
             var matchArray = text.match(/(?<=export \* from ")(.*)(?=";)/gm);
             for (var i = 0; i < matchArray.length; i++) {
                 var fnChild = path.join(dir, matchArray[i] + ".ts");
-                text = fs.readFileSync(getAbsoluteFileName(fnChild), 'utf8');
+                var absFnChild = getAbsoluteFileName(fnChild);
+                if (!fs.existsSync(absFnChild))
+                    return;
+                text = fs.readFileSync(absFnChild, 'utf8');
                 generateVueTSFile(text, dir);
             }
         }
@@ -1381,7 +1384,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             var parIndex = par.indexOf(":");
             if (parIndex < 0)
                 return "any";
-            entry.parameters.push({ name: par.substring(0, parIndex), type: par.substring(parIndex + 1) });
+            entry.parameters.push({ name: par.substring(0, parIndex).trim(), type: par.substring(parIndex + 1).trim() });
         }
         return dtsGetFunctionParametersDeclaration(entry, true);
     }
