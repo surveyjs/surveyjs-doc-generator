@@ -227,6 +227,7 @@ export function generateDocumentation(
       const dir = path.dirname(fn);
       generateVueTSFile(text, dir);
       const matchArray = text.match(/(?<=export \* from ")(.*)(?=";)/gm);
+      if(!Array.isArray(matchArray)) continue;
       for (var i = 0; i < matchArray.length; i++) {
           const fnChild = path.join(dir, matchArray[i] + ".ts");
           const absFnChild = getAbsoluteFileName(fnChild);

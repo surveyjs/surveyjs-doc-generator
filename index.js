@@ -192,6 +192,8 @@ function generateDocumentation(fileNames, options, docOptions) {
             var dir = path.dirname(fn);
             generateVueTSFile(text, dir);
             var matchArray = text.match(/(?<=export \* from ")(.*)(?=";)/gm);
+            if (!Array.isArray(matchArray))
+                continue;
             for (var i = 0; i < matchArray.length; i++) {
                 var fnChild = path.join(dir, matchArray[i] + ".ts");
                 var absFnChild = getAbsoluteFileName(fnChild);
