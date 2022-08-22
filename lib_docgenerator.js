@@ -1,9 +1,24 @@
 var doc = require("./index.js");
+var ts = require("typescript");
+/*
+var Survey = require("../survey-library/build/survey-knockout/survey.ko");
+
+doc.setJsonObj(Survey.Serializer);
+
+doc.generateDocumentation(["src/entries/chunks/model.ts"], {
+    target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
+});
+*/
+doc.generateDocumentation(["src/entries/index.ts"], {
+  target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
+});
+
 //var Survey = require("../survey-library/build/survey-knockout/survey.ko");
 //var SurveyCore = require("../survey-library/build/survey-core/survey-core");
 //var SurveyReact = require("../survey-library/build/survey-react-ui/survey-react-ui");
 
 //doc.setJsonObj(Survey.JsonObject.metaData);
+/*
 doc.generateDts({ 
   entries: ["./src/entries/knockout-ui.ts"],
   out: "./build/survey-knockout-ui/survey-knockout-ui.d.ts",
@@ -14,7 +29,7 @@ doc.generateDts({
     "survey-core": ["./build/survey-core/survey.core.d.ts"],
   }    
 })
-
+*/
 /*
 doc.generateDts({ 
   entries: ["../survey-creator-core/src/entries/index.ts", "./src/entries/index.ts"],

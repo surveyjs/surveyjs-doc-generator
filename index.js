@@ -391,6 +391,12 @@ function generateDocumentation(fileNames, options, docOptions) {
         entry.entryType = DocEntryType.variableType;
         dtsDeclarations[entry.name] = entry;
         visitVariableProperties(entry, node);
+        if (generateDocs) {
+            entry.allTypes = [entry.name];
+            entry.isPublic = true;
+            outputClasses.push(entry);
+            entry.members = [];
+        }
     }
     function visitEnumNode(node, symbol) {
         var modifier = ts.getCombinedModifierFlags(node);
@@ -438,6 +444,17 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (!entry.members)
                 entry.members = [];
             entry.members.push(memberEntry);
+            entry.members.push(memberEntry);
+            if (generateDocs) {
+                if (entry.entryType === DocEntryType.variableType) {
+                    outputPMEs.push(memberEntry);
+                    memberEntry.className = entry.name;
+                    memberEntry.pmeType = "property";
+                    memberEntry.isPublic = true;
+                    memberEntry.isField = true,
+                        memberEntry.hasSet = true;
+                }
+            }
             visitVariableProperties(memberEntry, node);
         }
     }
@@ -447,10 +464,13 @@ function generateDocumentation(fileNames, options, docOptions) {
         outputClasses.push(curClass);
         curJsonName = null;
         ts.forEachChild(node, visitClassNode);
+        if (generateDocs) {
+            curClass.members = [];
+        }
         if (!curJsonName)
             return;
         curClass.jsonName = curJsonName;
-        if (!jsonObjMetaData)
+        if (!jsonObjMetaData || !generateDocs)
             return;
         var properties = jsonObjMetaData.getProperties(curJsonName);
         for (var i = 0; i < outputPMEs.length; i++) {
