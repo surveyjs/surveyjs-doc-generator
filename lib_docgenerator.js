@@ -1,6 +1,6 @@
 var doc = require("./index.js");
 var ts = require("typescript");
-/*
+
 var Survey = require("../survey-library/build/survey-knockout/survey.ko");
 
 doc.setJsonObj(Survey.Serializer);
@@ -8,11 +8,12 @@ doc.setJsonObj(Survey.Serializer);
 doc.generateDocumentation(["src/entries/chunks/model.ts"], {
     target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
 });
-*/
+
+/*
 doc.generateDocumentation(["src/entries/index.ts"], {
   target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
 });
-
+*/
 //var Survey = require("../survey-library/build/survey-knockout/survey.ko");
 //var SurveyCore = require("../survey-library/build/survey-core/survey-core");
 //var SurveyReact = require("../survey-library/build/survey-react-ui/survey-react-ui");

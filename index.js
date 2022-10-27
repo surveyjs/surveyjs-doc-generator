@@ -607,6 +607,12 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (jsTags) {
             var seeArray = [];
             for (var i = 0; i < jsTags.length; i++) {
+                if (jsTags[i].name == "title") {
+                    res["metaTitle"] = jsTags[i].text;
+                }
+                if (jsTags[i].name == "description") {
+                    res["metaDescription"] = jsTags[i].text;
+                }
                 if (jsTags[i].name == "see") {
                     seeArray.push(jsTags[i].text);
                 }
