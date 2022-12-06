@@ -546,7 +546,7 @@ export function generateDocumentation(
       ser.isField = true;
       ser.isOptional = checker.isOptionalParameter(<any>node);
     }
-    if (ser.type.indexOf("Event") === 0) ser.pmeType = "event";
+    if (isSurveyEventType(ser.type)) ser.pmeType = "event";
     if (node.kind === ts.SyntaxKind.GetAccessor) {
       ser.isField = false;
       let serSet = pmesHash[fullName];
@@ -582,6 +582,9 @@ export function generateDocumentation(
       }
     }
     return null;
+  }
+  function isSurveyEventType(type: string): boolean {
+    return !!type && (type.indexOf("Event") === 0 || type.indexOf("CreatorEvent") === 0);
   }
   function getPMEType(nodeKind: ts.SyntaxKind) {
     if (nodeKind === ts.SyntaxKind.MethodDeclaration || nodeKind === ts.SyntaxKind.MethodSignature) return "method";

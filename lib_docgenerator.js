@@ -1,6 +1,8 @@
 var doc = require("./index.js");
 var ts = require("typescript");
 
+//doc.generateDocumentation(["src/entries/index.ts"], { target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS });
+
 var Survey = require("../survey-library/build/survey-knockout/survey.ko");
 
 doc.setJsonObj(Survey.Serializer);

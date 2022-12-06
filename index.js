@@ -538,7 +538,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             ser.isField = true;
             ser.isOptional = checker.isOptionalParameter(node);
         }
-        if (ser.type.indexOf("Event") === 0)
+        if (isSurveyEventType(ser.type))
             ser.pmeType = "event";
         if (node.kind === ts.SyntaxKind.GetAccessor) {
             ser.isField = false;
@@ -578,6 +578,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
         }
         return null;
+    }
+    function isSurveyEventType(type) {
+        return !!type && (type.indexOf("Event") === 0 || type.indexOf("CreatorEvent") === 0);
     }
     function getPMEType(nodeKind) {
         if (nodeKind === ts.SyntaxKind.MethodDeclaration || nodeKind === ts.SyntaxKind.MethodSignature)
