@@ -1,6 +1,8 @@
 import * as ts from "typescript";
 import * as fs from "fs";
-import * as path from "path"
+import * as path from "path";
+
+const SurveyModelSenderDescription = "A survey instance that raised the event.";
 
 enum DocEntryType {unknown, classType, interfaceType, functionType, variableType, enumType};
 interface DocEntry {
@@ -36,6 +38,8 @@ interface DocEntry {
   defaultValue?: any;
   serializedChoices?: any[];
   moduleName?: string;
+  eventSenderName?: string;
+  eventOptionsName?: string;
 }
 const callbackFuncResultStr = ") => ";
 var isExportingReact: boolean = false;
@@ -190,6 +194,7 @@ export function generateDocumentation(
     setAllParentTypes(key);
   }
   if(generateDocs) {
+    updateEventsDocumentation();
     // print out the doc
     fs.writeFileSync(
       process.cwd() + "/docs/classes.json",
@@ -353,10 +358,9 @@ export function generateDocumentation(
       }
     } else if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
       // This is a top level class, get its symbol
-      let symbol = checker.getSymbolAtLocation(
-        (<ts.InterfaceDeclaration>node).name
-      );
-      if (generateDts || isSymbolHasComments(symbol)) {
+      const name = (<ts.InterfaceDeclaration>node).name;
+      let symbol = checker.getSymbolAtLocation(name);
+      if (generateDts || isSymbolHasComments(symbol) || name.text.indexOf("IOn") == 0) {
         visitDocumentedNode(node, symbol);
       }
     } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
@@ -470,9 +474,13 @@ export function generateDocumentation(
   function visitDocumentedNode(node: ts.Node, symbol: ts.Symbol) {
     curClass = serializeClass(symbol, node);
     classesHash[curClass.name] = curClass;
-    outputClasses.push(curClass);
+    let isOptions = curClass.name.indexOf("IOn") === 0;
+    if(!isOptions) {
+      outputClasses.push(curClass);
+    }
     curJsonName = null;
     ts.forEachChild(node, visitClassNode);
+    if(isOptions) return;
     if(generateDocs) {
       curClass.members = [];
     }
@@ -546,7 +554,10 @@ export function generateDocumentation(
       ser.isField = true;
       ser.isOptional = checker.isOptionalParameter(<any>node);
     }
-    if (isSurveyEventType(ser.type)) ser.pmeType = "event";
+    if (isSurveyEventType(ser.type)) {
+      ser.pmeType = "event";
+      updateEventOptionInterfaceName(node, ser);
+    }
     if (node.kind === ts.SyntaxKind.GetAccessor) {
       ser.isField = false;
       let serSet = pmesHash[fullName];
@@ -595,6 +606,17 @@ export function generateDocumentation(
     if (symbol.valueDeclaration)
       return checker.getTypeOfSymbolAtLocation(symbol, symbol.valueDeclaration);
     return checker.getDeclaredTypeOfSymbol(symbol);
+  }
+  function updateEventOptionInterfaceName(node: ts.Node, ser: DocEntry): void {
+    const typeObj: any = checker.getTypeAtLocation(node);
+    if(!typeObj) return;
+    const args = typeObj.typeArguments;
+    if(!Array.isArray(args) || args.length < 2) return;
+    ser.eventSenderName = getSymbolName(args[0].symbol);
+    ser.eventOptionsName = getSymbolName(args[1].symbol);
+  }
+  function getSymbolName(symbol: any): string {
+    return !!symbol && !!symbol.name ? symbol.name : ""; 
   }
   /** Serialize a symbol into a json object */
 
@@ -1009,6 +1031,58 @@ export function generateDocumentation(
       }
     }
   }
+  function updateEventsDocumentation() {
+    for(let i = 0; i < outputPMEs.length; i ++) {
+      const ser = outputPMEs[i];
+      if(!ser.eventSenderName) continue;
+      if(!ser.documentation) ser.documentation = "";
+      if(ser.documentation.indexOf("- `sender`:") > -1) continue;
+      const lines = [];
+      lines.push("");
+      lines.push("Parameters:");
+      lines.push("");
+      updateEventDocumentationSender(ser, lines);
+      updateEventDocumentationOptions(ser, lines);
+      ser.documentation += lines.join("\n");
+    }
+  }
+  function updateEventDocumentationSender(ser: DocEntry, lines: Array<string>) {
+    if(!ser.eventSenderName) return;
+    lines.push(" - `sender`: `"+ ser.eventSenderName + "`");
+    let desc = "";
+    if(ser.eventSenderName === "SurveyModel") {
+      desc = SurveyModelSenderDescription;
+    }
+    if(!!desc) {
+      lines.push(desc);
+    }
+  }
+  function updateEventDocumentationOptions(ser: DocEntry, lines: Array<string>) {
+    if(!ser.eventOptionsName) return;
+    const members = new Array<DocEntry>();
+    fillEventMembers(ser.eventOptionsName, members);
+    for(let i = 0; i < members.length; i ++) {
+      const m = members[i];
+      let doc = m.documentation;
+      lines.push("- `options." + m.name + "`: `" + m.type + "`");
+      if(!!doc) {
+        lines.push(doc);
+      }
+    }
+  }
+  function fillEventMembers(interfaceName: string, members: Array<DocEntry>): void {
+    const classEntry: DocEntry = classesHash[interfaceName];
+    if(!classEntry) return;
+    if(Array.isArray(classEntry.implements)) {
+      for(let i = 0; i < classEntry.implements.length; i ++) {
+        fillEventMembers(classEntry.implements[i], members);
+      }
+    }
+    if(!Array.isArray(classEntry.members)) return;
+    for(let i = 0; i < classEntry.members.length; i ++) {
+      members.push(classEntry.members[i]);
+    }
+  } 
   function getReferenceType(type: string): any {
     var curClass = classesHash[type];
     if (!curClass) return type;

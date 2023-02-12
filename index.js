@@ -4,6 +4,7 @@ exports.generateDocumentation = exports.generateDts = exports.setJsonObj = void 
 var ts = require("typescript");
 var fs = require("fs");
 var path = require("path");
+var SurveyModelSenderDescription = "A survey instance that raised the event.";
 var DocEntryType;
 (function (DocEntryType) {
     DocEntryType[DocEntryType["unknown"] = 0] = "unknown";
@@ -162,6 +163,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         setAllParentTypes(key);
     }
     if (generateDocs) {
+        updateEventsDocumentation();
         // print out the doc
         fs.writeFileSync(process.cwd() + "/docs/classes.json", JSON.stringify(outputClasses, undefined, 4));
         fs.writeFileSync(process.cwd() + "/docs/pmes.json", JSON.stringify(outputPMEs, undefined, 4));
@@ -331,8 +333,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
         else if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
             // This is a top level class, get its symbol
-            var symbol = checker.getSymbolAtLocation(node.name);
-            if (generateDts || isSymbolHasComments(symbol)) {
+            var name_1 = node.name;
+            var symbol = checker.getSymbolAtLocation(name_1);
+            if (generateDts || isSymbolHasComments(symbol) || name_1.text.indexOf("IOn") == 0) {
                 visitDocumentedNode(node, symbol);
             }
         }
@@ -357,12 +360,12 @@ function generateDocumentation(fileNames, options, docOptions) {
             var el = els[i];
             if (!el.name || !el.propertyName && !exportLibrary)
                 continue;
-            var name_1 = el.name.text;
-            if (!name_1)
+            var name_2 = el.name.text;
+            if (!name_2)
                 continue;
-            if (!exportLibrary && dtsImportDeclarations[name_1])
+            if (!exportLibrary && dtsImportDeclarations[name_2])
                 continue;
-            var entry = { name: name_1 };
+            var entry = { name: name_2 };
             if (!!el.propertyName) {
                 entry.className = el.propertyName.text;
             }
@@ -461,9 +464,14 @@ function generateDocumentation(fileNames, options, docOptions) {
     function visitDocumentedNode(node, symbol) {
         curClass = serializeClass(symbol, node);
         classesHash[curClass.name] = curClass;
-        outputClasses.push(curClass);
+        var isOptions = curClass.name.indexOf("IOn") === 0;
+        if (!isOptions) {
+            outputClasses.push(curClass);
+        }
         curJsonName = null;
         ts.forEachChild(node, visitClassNode);
+        if (isOptions)
+            return;
         if (generateDocs) {
             curClass.members = [];
         }
@@ -538,8 +546,10 @@ function generateDocumentation(fileNames, options, docOptions) {
             ser.isField = true;
             ser.isOptional = checker.isOptionalParameter(node);
         }
-        if (isSurveyEventType(ser.type))
+        if (isSurveyEventType(ser.type)) {
             ser.pmeType = "event";
+            updateEventOptionInterfaceName(node, ser);
+        }
         if (node.kind === ts.SyntaxKind.GetAccessor) {
             ser.isField = false;
             var serSet = pmesHash[fullName];
@@ -593,6 +603,19 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (symbol.valueDeclaration)
             return checker.getTypeOfSymbolAtLocation(symbol, symbol.valueDeclaration);
         return checker.getDeclaredTypeOfSymbol(symbol);
+    }
+    function updateEventOptionInterfaceName(node, ser) {
+        var typeObj = checker.getTypeAtLocation(node);
+        if (!typeObj)
+            return;
+        var args = typeObj.typeArguments;
+        if (!Array.isArray(args) || args.length < 2)
+            return;
+        ser.eventSenderName = getSymbolName(args[0].symbol);
+        ser.eventOptionsName = getSymbolName(args[1].symbol);
+    }
+    function getSymbolName(symbol) {
+        return !!symbol && !!symbol.name ? symbol.name : "";
     }
     /** Serialize a symbol into a json object */
     function serializeSymbol(symbol) {
@@ -700,10 +723,10 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!clause || !Array.isArray(clause.types))
             return undefined;
         for (var i = 0; i < clause.types.length; i++) {
-            var name_2 = getBaseType(clause.types[i]);
-            if (!!name_2) {
-                res.push(name_2);
-                setTypeParameters(name_2, clause.types[i], className);
+            var name_3 = getBaseType(clause.types[i]);
+            if (!!name_3) {
+                res.push(name_3);
+                setTypeParameters(name_3, clause.types[i], className);
             }
         }
     }
@@ -713,10 +736,10 @@ function generateDocumentation(fileNames, options, docOptions) {
         var extendsType = checker.getTypeAtLocation(firstHeritageClauseType.expression);
         var expression = firstHeritageClauseType.expression;
         if (extendsType && extendsType.symbol) {
-            var name_3 = extendsType.symbol.name;
+            var name_4 = extendsType.symbol.name;
             if (!!expression.expression && expression.expression.escapedText)
-                return expression.expression.escapedText + "." + name_3;
-            return name_3;
+                return expression.expression.escapedText + "." + name_4;
+            return name_4;
         }
         if (!!expression.text)
             return expression.text;
@@ -748,9 +771,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             return undefined;
         var res = [];
         for (var i = 0; i < params.length; i++) {
-            var name_4 = getTypeParameterName(params[i], isArgument);
+            var name_5 = getTypeParameterName(params[i], isArgument);
             var extendsType = getTypeParameterConstrains(params[i]);
-            res.push(name_4 + extendsType);
+            res.push(name_5 + extendsType);
         }
         return res.length > 0 ? res : undefined;
     }
@@ -830,10 +853,10 @@ function generateDocumentation(fileNames, options, docOptions) {
                 if (!Array.isArray(props))
                     continue;
                 for (var k = 0; k < props.length; k++) {
-                    var name_5 = props[k]["name"];
-                    if (!name_5)
+                    var name_6 = props[k]["name"];
+                    if (!name_6)
                         continue;
-                    var symName = checker.getSymbolAtLocation(name_5);
+                    var symName = checker.getSymbolAtLocation(name_6);
                     if (!!symName && symName.name === "localizable")
                         return true;
                 }
@@ -1034,6 +1057,65 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
         }
     }
+    function updateEventsDocumentation() {
+        for (var i_1 = 0; i_1 < outputPMEs.length; i_1++) {
+            var ser = outputPMEs[i_1];
+            if (!ser.eventSenderName)
+                continue;
+            if (!ser.documentation)
+                ser.documentation = "";
+            if (ser.documentation.indexOf("- `sender`:") > -1)
+                continue;
+            var lines = [];
+            lines.push("");
+            lines.push("Parameters:");
+            lines.push("");
+            updateEventDocumentationSender(ser, lines);
+            updateEventDocumentationOptions(ser, lines);
+            ser.documentation += lines.join("\n");
+        }
+    }
+    function updateEventDocumentationSender(ser, lines) {
+        if (!ser.eventSenderName)
+            return;
+        lines.push(" - `sender`: `" + ser.eventSenderName + "`");
+        var desc = "";
+        if (ser.eventSenderName === "SurveyModel") {
+            desc = SurveyModelSenderDescription;
+        }
+        if (!!desc) {
+            lines.push(desc);
+        }
+    }
+    function updateEventDocumentationOptions(ser, lines) {
+        if (!ser.eventOptionsName)
+            return;
+        var members = new Array();
+        fillEventMembers(ser.eventOptionsName, members);
+        for (var i_2 = 0; i_2 < members.length; i_2++) {
+            var m = members[i_2];
+            var doc = m.documentation;
+            lines.push("- `options." + m.name + "`: `" + m.type + "`");
+            if (!!doc) {
+                lines.push(doc);
+            }
+        }
+    }
+    function fillEventMembers(interfaceName, members) {
+        var classEntry = classesHash[interfaceName];
+        if (!classEntry)
+            return;
+        if (Array.isArray(classEntry.implements)) {
+            for (var i_3 = 0; i_3 < classEntry.implements.length; i_3++) {
+                fillEventMembers(classEntry.implements[i_3], members);
+            }
+        }
+        if (!Array.isArray(classEntry.members))
+            return;
+        for (var i_4 = 0; i_4 < classEntry.members.length; i_4++) {
+            members.push(classEntry.members[i_4]);
+        }
+    }
     function getReferenceType(type) {
         var curClass = classesHash[type];
         if (!curClass)
@@ -1184,8 +1266,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (importLines.length > 0) {
             lines.unshift("");
         }
-        for (var i_1 = importLines.length - 1; i_1 >= 0; i_1--) {
-            lines.unshift(importLines[i_1]);
+        for (var i_5 = importLines.length - 1; i_5 >= 0; i_5--) {
+            lines.unshift(importLines[i_5]);
         }
     }
     function dtsRenderExportClassFromLibraries(lines, entry) {
@@ -1297,10 +1379,10 @@ function generateDocumentation(fileNames, options, docOptions) {
             var member = members[i];
             dtsRenderDeclarationMember(lines, member);
             if (member.isLocalizable) {
-                var name_6 = "loc" + member.name[0].toUpperCase() + member.name.substring(1);
-                if (dtsHasMemberInEntry(entry, name_6))
+                var name_7 = "loc" + member.name[0].toUpperCase() + member.name.substring(1);
+                if (dtsHasMemberInEntry(entry, name_7))
                     continue;
-                var locMember = { name: name_6, type: "LocalizableString", hasSet: false, pmeType: "property" };
+                var locMember = { name: name_7, type: "LocalizableString", hasSet: false, pmeType: "property" };
                 dtsRenderDeclarationMember(lines, locMember);
             }
         }
