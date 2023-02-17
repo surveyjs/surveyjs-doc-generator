@@ -281,9 +281,17 @@ function generateDocumentation(fileNames, options, docOptions) {
     function setAllParentTypesCore(cur) {
         cur.allTypes = [];
         cur.allTypes.push(cur.name);
+        if (cur.entryType === DocEntryType.interfaceType && Array.isArray(cur.implements)) {
+            cur.implements.forEach(function (item) { return addBaseAllTypesIntoCur(cur, item); });
+        }
         if (!cur.baseType)
             return;
-        var baseClass = classesHash[cur.baseType];
+        addBaseAllTypesIntoCur(cur, cur.baseType);
+    }
+    function addBaseAllTypesIntoCur(cur, className) {
+        if (!className)
+            return;
+        var baseClass = classesHash[className];
         if (!baseClass)
             return;
         if (!baseClass.allTypes) {
@@ -472,9 +480,6 @@ function generateDocumentation(fileNames, options, docOptions) {
         ts.forEachChild(node, visitClassNode);
         if (isOptions)
             return;
-        if (generateDocs) {
-            curClass.members = [];
-        }
         if (!curJsonName)
             return;
         curClass.jsonName = curJsonName;

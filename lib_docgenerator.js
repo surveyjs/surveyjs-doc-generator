@@ -12,6 +12,11 @@ doc.generateDocumentation(["src/entries/chunks/model.ts"], {
 });
 
 /*
+doc.generateDocumentation(["src/entries/pdf.ts"], {
+  target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
+});
+*/
+/*
 doc.generateDocumentation(["src/entries/index.ts"], {
   target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
 });

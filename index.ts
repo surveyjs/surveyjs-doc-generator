@@ -310,8 +310,15 @@ export function generateDocumentation(
   function setAllParentTypesCore(cur: any) {
     cur.allTypes = [];
     cur.allTypes.push(cur.name);
+    if(cur.entryType === DocEntryType.interfaceType && Array.isArray(cur.implements)) {
+      cur.implements.forEach(item => addBaseAllTypesIntoCur(cur, item));
+    }
     if (!cur.baseType) return;
-    var baseClass = classesHash[cur.baseType];
+    addBaseAllTypesIntoCur(cur, cur.baseType);
+  }
+  function addBaseAllTypesIntoCur(cur: any, className: string): void {
+    if(!className) return;
+    var baseClass = classesHash[className];
     if (!baseClass) return;
     if (!baseClass.allTypes) {
       setAllParentTypesCore(baseClass);
@@ -481,9 +488,6 @@ export function generateDocumentation(
     curJsonName = null;
     ts.forEachChild(node, visitClassNode);
     if(isOptions) return;
-    if(generateDocs) {
-      curClass.members = [];
-    }
     if (!curJsonName) return;
     curClass.jsonName = curJsonName;
     if (!jsonObjMetaData || !generateDocs) return;
