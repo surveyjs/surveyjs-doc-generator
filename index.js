@@ -4,6 +4,7 @@ exports.generateDocumentation = exports.generateDts = exports.setJsonObj = void 
 var ts = require("typescript");
 var fs = require("fs");
 var path = require("path");
+var EventDescriptReplacedText = "For information on event handler parameters, refer to descriptions within the interface.";
 var SurveyModelSenderDescription = "A survey instance that raised the event.";
 var DocEntryType;
 (function (DocEntryType) {
@@ -1072,12 +1073,18 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (ser.documentation.indexOf("- `sender`:") > -1)
                 continue;
             var lines = [];
-            lines.push("");
             lines.push("Parameters:");
             lines.push("");
             updateEventDocumentationSender(ser, lines);
             updateEventDocumentationOptions(ser, lines);
-            ser.documentation += lines.join("\n");
+            var replacedTextIndex = ser.documentation.indexOf(EventDescriptReplacedText);
+            if (replacedTextIndex > -1) {
+                ser.documentation = ser.documentation.replace(EventDescriptReplacedText, lines.join("\n"));
+            }
+            else {
+                lines.unshift("");
+                ser.documentation += lines.join("\n");
+            }
         }
     }
     function updateEventDocumentationSender(ser, lines) {

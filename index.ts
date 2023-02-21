@@ -2,7 +2,9 @@ import * as ts from "typescript";
 import * as fs from "fs";
 import * as path from "path";
 
+const EventDescriptReplacedText = "For information on event handler parameters, refer to descriptions within the interface.";
 const SurveyModelSenderDescription = "A survey instance that raised the event.";
+
 
 enum DocEntryType {unknown, classType, interfaceType, functionType, variableType, enumType};
 interface DocEntry {
@@ -1042,12 +1044,17 @@ export function generateDocumentation(
       if(!ser.documentation) ser.documentation = "";
       if(ser.documentation.indexOf("- `sender`:") > -1) continue;
       const lines = [];
-      lines.push("");
       lines.push("Parameters:");
       lines.push("");
       updateEventDocumentationSender(ser, lines);
       updateEventDocumentationOptions(ser, lines);
-      ser.documentation += lines.join("\n");
+      let replacedTextIndex = ser.documentation.indexOf(EventDescriptReplacedText);
+      if(replacedTextIndex > -1) {
+        ser.documentation = ser.documentation.replace(EventDescriptReplacedText, lines.join("\n"));
+      } else {
+        lines.unshift("");
+        ser.documentation += lines.join("\n");
+      }
     }
   }
   function updateEventDocumentationSender(ser: DocEntry, lines: Array<string>) {
