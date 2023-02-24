@@ -344,7 +344,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             // This is a top level class, get its symbol
             var name_1 = node.name;
             var symbol = checker.getSymbolAtLocation(name_1);
-            if (generateDts || isSymbolHasComments(symbol) || name_1.text.indexOf("IOn") == 0) {
+            if (generateDts || isSymbolHasComments(symbol) || isOptionsInterface(name_1.text)) {
                 visitDocumentedNode(node, symbol);
             }
         }
@@ -935,6 +935,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         var com = symbol.getDocumentationComment(undefined);
         return com && com.length > 0;
     }
+    function isOptionsInterface(name) {
+        return name.indexOf("Options") > -1;
+    }
     function addClassIntoJSONDefinition(className, isRoot) {
         if (isRoot === void 0) { isRoot = false; }
         if (className == "IElement") {
@@ -1102,30 +1105,32 @@ function generateDocumentation(fileNames, options, docOptions) {
     function updateEventDocumentationOptions(ser, lines) {
         if (!ser.eventOptionsName)
             return;
-        var members = new Array();
+        var members = {};
         fillEventMembers(ser.eventOptionsName, members);
-        for (var i_2 = 0; i_2 < members.length; i_2++) {
-            var m = members[i_2];
+        for (var key_1 in members) {
+            var m = members[key_1];
             var doc = m.documentation;
             lines.push("- `options." + m.name + "`: `" + m.type + "`");
             if (!!doc) {
                 lines.push(doc);
             }
         }
+        ;
     }
     function fillEventMembers(interfaceName, members) {
         var classEntry = classesHash[interfaceName];
         if (!classEntry)
             return;
         if (Array.isArray(classEntry.implements)) {
-            for (var i_3 = 0; i_3 < classEntry.implements.length; i_3++) {
-                fillEventMembers(classEntry.implements[i_3], members);
+            for (var i_2 = 0; i_2 < classEntry.implements.length; i_2++) {
+                fillEventMembers(classEntry.implements[i_2], members);
             }
         }
         if (!Array.isArray(classEntry.members))
             return;
-        for (var i_4 = 0; i_4 < classEntry.members.length; i_4++) {
-            members.push(classEntry.members[i_4]);
+        for (var i_3 = 0; i_3 < classEntry.members.length; i_3++) {
+            var m = classEntry.members[i_3];
+            members[m.name] = m;
         }
     }
     function getReferenceType(type) {
@@ -1278,8 +1283,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (importLines.length > 0) {
             lines.unshift("");
         }
-        for (var i_5 = importLines.length - 1; i_5 >= 0; i_5--) {
-            lines.unshift(importLines[i_5]);
+        for (var i_4 = importLines.length - 1; i_4 >= 0; i_4--) {
+            lines.unshift(importLines[i_4]);
         }
     }
     function dtsRenderExportClassFromLibraries(lines, entry) {

@@ -369,7 +369,7 @@ export function generateDocumentation(
       // This is a top level class, get its symbol
       const name = (<ts.InterfaceDeclaration>node).name;
       let symbol = checker.getSymbolAtLocation(name);
-      if (generateDts || isSymbolHasComments(symbol) || name.text.indexOf("IOn") == 0) {
+      if (generateDts || isSymbolHasComments(symbol) || isOptionsInterface(name.text)) {
         visitDocumentedNode(node, symbol);
       }
     } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
@@ -910,6 +910,9 @@ export function generateDocumentation(
     let com = symbol.getDocumentationComment(undefined);
     return com && com.length > 0;
   }
+  function isOptionsInterface(name: string): boolean {
+    return name.indexOf("Options") > -1;
+  }
   function addClassIntoJSONDefinition(
     className: string,
     isRoot: boolean = false
@@ -1070,18 +1073,18 @@ export function generateDocumentation(
   }
   function updateEventDocumentationOptions(ser: DocEntry, lines: Array<string>) {
     if(!ser.eventOptionsName) return;
-    const members = new Array<DocEntry>();
+    const members: any = {};
     fillEventMembers(ser.eventOptionsName, members);
-    for(let i = 0; i < members.length; i ++) {
-      const m = members[i];
+    for(let key in members) {
+      const m = members[key];
       let doc = m.documentation;
       lines.push("- `options." + m.name + "`: `" + m.type + "`");
       if(!!doc) {
         lines.push(doc);
       }
-    }
+    };
   }
-  function fillEventMembers(interfaceName: string, members: Array<DocEntry>): void {
+  function fillEventMembers(interfaceName: string, members: any): void {
     const classEntry: DocEntry = classesHash[interfaceName];
     if(!classEntry) return;
     if(Array.isArray(classEntry.implements)) {
@@ -1091,7 +1094,8 @@ export function generateDocumentation(
     }
     if(!Array.isArray(classEntry.members)) return;
     for(let i = 0; i < classEntry.members.length; i ++) {
-      members.push(classEntry.members[i]);
+      const m = classEntry.members[i];
+      members[m.name] = m;
     }
   } 
   function getReferenceType(type: string): any {
