@@ -936,7 +936,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         return com && com.length > 0;
     }
     function isOptionsInterface(name) {
-        return name.indexOf("Options") > -1;
+        return name.indexOf("Options") > -1 || name.indexOf("Event") > -1;
     }
     function addClassIntoJSONDefinition(className, isRoot) {
         if (isRoot === void 0) { isRoot = false; }

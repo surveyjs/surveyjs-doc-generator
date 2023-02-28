@@ -911,7 +911,7 @@ export function generateDocumentation(
     return com && com.length > 0;
   }
   function isOptionsInterface(name: string): boolean {
-    return name.indexOf("Options") > -1;
+    return name.indexOf("Options") > -1 || name.indexOf("Event") > -1;
   }
   function addClassIntoJSONDefinition(
     className: string,
