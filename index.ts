@@ -563,6 +563,9 @@ export function generateDocumentation(
     if (isSurveyEventType(ser.type)) {
       ser.pmeType = "event";
       updateEventOptionInterfaceName(node, ser);
+      if(ser.eventSenderName === "__type" && !ser.documentation) {
+        ser = null;
+      }
     }
     if (node.kind === ts.SyntaxKind.GetAccessor) {
       ser.isField = false;
