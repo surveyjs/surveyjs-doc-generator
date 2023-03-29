@@ -1076,6 +1076,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (ser.documentation.indexOf("- `sender`:") > -1)
                 continue;
             var lines = [];
+            lines.push("");
             lines.push("Parameters:");
             lines.push("");
             updateEventDocumentationSender(ser, lines);

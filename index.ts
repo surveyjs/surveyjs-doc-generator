@@ -1047,6 +1047,7 @@ export function generateDocumentation(
       if(!ser.documentation) ser.documentation = "";
       if(ser.documentation.indexOf("- `sender`:") > -1) continue;
       const lines = [];
+      lines.push("");
       lines.push("Parameters:");
       lines.push("");
       updateEventDocumentationSender(ser, lines);
