@@ -638,6 +638,14 @@ function generateDocumentation(fileNames, options, docOptions) {
             type: checker.typeToString(type),
             isPublic: isPublic
         };
+        if (res.type === "any") {
+            if (!!symbol.valueDeclaration && !!symbol.valueDeclaration.type) {
+                var t = symbol.valueDeclaration.type;
+                if (!!t.typeName && !!t.typeName.text) {
+                    res.type = t.typeName.text;
+                }
+            }
+        }
         var jsTags = symbol.getJsDocTags();
         if (jsTags) {
             var seeArray = [];

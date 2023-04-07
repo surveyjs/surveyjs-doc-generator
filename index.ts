@@ -640,6 +640,14 @@ export function generateDocumentation(
       type: checker.typeToString(type),
       isPublic: isPublic
     };
+    if(res.type === "any") {
+      if(!!symbol.valueDeclaration && !!(<any>symbol.valueDeclaration).type) {
+          var t = (<any>symbol.valueDeclaration).type;
+          if(!!t.typeName && !!t.typeName.text) {
+              res.type = t.typeName.text;
+          }
+      }
+    }
     var jsTags = symbol.getJsDocTags();
     if (jsTags) {
       var seeArray = [];
