@@ -555,7 +555,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (isSurveyEventType(ser.type)) {
             ser.pmeType = "event";
             updateEventOptionInterfaceName(node, ser);
-            if (ser.eventSenderName === "__type" && !ser.documentation) {
+            if (!ser.documentation && (ser.eventSenderName === "__type" || !ser.eventOptionsName)) {
                 ser = null;
             }
         }
