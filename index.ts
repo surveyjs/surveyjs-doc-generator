@@ -621,9 +621,9 @@ export function generateDocumentation(
     if(!typeObj) return;
     const args = typeObj.typeArguments;
     if(!Array.isArray(args) || args.length < 2) return;
-    ser.eventSenderName = getSymbolName(args[0].symbol);
-    ser.eventOptionsName = getSymbolName(args[1].symbol);
-  }
+    ser.eventSenderName = getSymbolName(args[args.length - 2].symbol);
+    ser.eventOptionsName = getSymbolName(args[args.length - 1].symbol);
+}
   function getSymbolName(symbol: any): string {
     return !!symbol && !!symbol.name ? symbol.name : ""; 
   }
@@ -640,14 +640,6 @@ export function generateDocumentation(
       type: checker.typeToString(type),
       isPublic: isPublic
     };
-    if(res.type === "any") {
-      if(!!symbol.valueDeclaration && !!(<any>symbol.valueDeclaration).type) {
-          var t = (<any>symbol.valueDeclaration).type;
-          if(!!t.typeName && !!t.typeName.text) {
-              res.type = t.typeName.text;
-          }
-      }
-    }
     var jsTags = symbol.getJsDocTags();
     if (jsTags) {
       var seeArray = [];
@@ -1054,7 +1046,7 @@ export function generateDocumentation(
   function updateEventsDocumentation() {
     for(let i = 0; i < outputPMEs.length; i ++) {
       const ser = outputPMEs[i];
-      if(!ser.eventSenderName) continue;
+      if(!ser.eventSenderName || !ser.eventOptionsName) continue;
       if(!ser.documentation) ser.documentation = "";
       if(ser.documentation.indexOf("- `sender`:") > -1) continue;
       const lines = [];

@@ -620,8 +620,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         var args = typeObj.typeArguments;
         if (!Array.isArray(args) || args.length < 2)
             return;
-        ser.eventSenderName = getSymbolName(args[0].symbol);
-        ser.eventOptionsName = getSymbolName(args[1].symbol);
+        ser.eventSenderName = getSymbolName(args[args.length - 2].symbol);
+        ser.eventOptionsName = getSymbolName(args[args.length - 1].symbol);
     }
     function getSymbolName(symbol) {
         return !!symbol && !!symbol.name ? symbol.name : "";
@@ -638,14 +638,6 @@ function generateDocumentation(fileNames, options, docOptions) {
             type: checker.typeToString(type),
             isPublic: isPublic
         };
-        if (res.type === "any") {
-            if (!!symbol.valueDeclaration && !!symbol.valueDeclaration.type) {
-                var t = symbol.valueDeclaration.type;
-                if (!!t.typeName && !!t.typeName.text) {
-                    res.type = t.typeName.text;
-                }
-            }
-        }
         var jsTags = symbol.getJsDocTags();
         if (jsTags) {
             var seeArray = [];
@@ -1080,7 +1072,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     function updateEventsDocumentation() {
         for (var i_1 = 0; i_1 < outputPMEs.length; i_1++) {
             var ser = outputPMEs[i_1];
-            if (!ser.eventSenderName)
+            if (!ser.eventSenderName || !ser.eventOptionsName)
                 continue;
             if (!ser.documentation)
                 ser.documentation = "";
