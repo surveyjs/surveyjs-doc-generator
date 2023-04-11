@@ -1066,11 +1066,11 @@ export function generateDocumentation(
   }
   function updateEventDocumentationSender(ser: DocEntry, lines: Array<string>) {
     if(!ser.eventSenderName) return;
-    lines.push(" - `sender`: `"+ ser.eventSenderName + "`");
     let desc = "";
     if(ser.eventSenderName === "SurveyModel") {
       desc = SurveyModelSenderDescription;
     }
+    lines.push(" - `sender`: `"+ ser.eventSenderName + "`" +  (!!desc ? "  " : ""));
     if(!!desc) {
       lines.push(desc);
     }
@@ -1082,7 +1082,7 @@ export function generateDocumentation(
     for(let key in members) {
       const m = members[key];
       let doc = m.documentation;
-      lines.push("- `options." + m.name + "`: `" + m.type + "`");
+      lines.push("- `options." + m.name + "`: `" + m.type + "`" +  (!!doc ? "  " : ""));
       if(!!doc) {
         lines.push(doc);
       }

@@ -1097,11 +1097,11 @@ function generateDocumentation(fileNames, options, docOptions) {
     function updateEventDocumentationSender(ser, lines) {
         if (!ser.eventSenderName)
             return;
-        lines.push(" - `sender`: `" + ser.eventSenderName + "`");
         var desc = "";
         if (ser.eventSenderName === "SurveyModel") {
             desc = SurveyModelSenderDescription;
         }
+        lines.push(" - `sender`: `" + ser.eventSenderName + "`" + (!!desc ? "  " : ""));
         if (!!desc) {
             lines.push(desc);
         }
@@ -1114,7 +1114,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var key_1 in members) {
             var m = members[key_1];
             var doc = m.documentation;
-            lines.push("- `options." + m.name + "`: `" + m.type + "`");
+            lines.push("- `options." + m.name + "`: `" + m.type + "`" + (!!doc ? "  " : ""));
             if (!!doc) {
                 lines.push(doc);
             }
