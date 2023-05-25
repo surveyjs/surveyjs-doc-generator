@@ -25,6 +25,7 @@ interface DocEntry {
   members?: DocEntry[];
   parameters?: DocEntry[];
   returnType?: string;
+  returnDocumentation?: string;
   returnTypeGenerics?: string[];
   typeGenerics?: string[];
   pmeType?: string;
@@ -652,6 +653,9 @@ export function generateDocumentation(
         }
         if (jsTags[i].name == "see") {
           seeArray.push(jsTags[i].text);
+        }
+        if (jsTags[i].name == "returns") {
+          res["returnDocumentation"] = jsTags[i].text;
         }
       }
       if (seeArray.length > 0) {

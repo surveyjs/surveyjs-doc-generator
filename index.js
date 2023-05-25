@@ -651,6 +651,9 @@ function generateDocumentation(fileNames, options, docOptions) {
                 if (jsTags[i].name == "see") {
                     seeArray.push(jsTags[i].text);
                 }
+                if (jsTags[i].name == "returns") {
+                    res["returnDocumentation"] = jsTags[i].text;
+                }
             }
             if (seeArray.length > 0) {
                 res["see"] = seeArray;
