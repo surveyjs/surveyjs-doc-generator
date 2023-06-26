@@ -1086,11 +1086,17 @@ export function generateDocumentation(
     for(let key in members) {
       const m = members[key];
       let doc = m.documentation;
+      if(isHiddenEntryByDoc(doc)) continue;
       lines.push("- `options." + m.name + "`: `" + m.type + "`" +  (!!doc ? "  " : ""));
       if(!!doc) {
         lines.push(doc);
       }
     };
+  }
+  function isHiddenEntryByDoc(doc: string): boolean {
+    if(!doc) return true;
+    doc = doc.toLocaleLowerCase();
+    return doc.startsWith("obsolete") || doc.startsWith("for internal use");
   }
   function fillEventMembers(interfaceName: string, members: any): void {
     const classEntry: DocEntry = classesHash[interfaceName];

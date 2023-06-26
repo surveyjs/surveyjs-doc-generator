@@ -1117,12 +1117,20 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var key_1 in members) {
             var m = members[key_1];
             var doc = m.documentation;
+            if (isHiddenEntryByDoc(doc))
+                continue;
             lines.push("- `options." + m.name + "`: `" + m.type + "`" + (!!doc ? "  " : ""));
             if (!!doc) {
                 lines.push(doc);
             }
         }
         ;
+    }
+    function isHiddenEntryByDoc(doc) {
+        if (!doc)
+            return true;
+        doc = doc.toLocaleLowerCase();
+        return doc.startsWith("obsolete") || doc.startsWith("for internal use");
     }
     function fillEventMembers(interfaceName, members) {
         var classEntry = classesHash[interfaceName];
