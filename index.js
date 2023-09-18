@@ -1075,7 +1075,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     function updateEventsDocumentation() {
         for (var i_1 = 0; i_1 < outputPMEs.length; i_1++) {
             var ser = outputPMEs[i_1];
-            if (!ser.eventSenderName || !ser.eventOptionsName)
+            if (!ser.eventSenderName || !ser.eventOptionsName || ser.eventOptionsName === "__type")
                 continue;
             if (!ser.documentation)
                 ser.documentation = "";

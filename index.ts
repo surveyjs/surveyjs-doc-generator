@@ -1050,7 +1050,7 @@ export function generateDocumentation(
   function updateEventsDocumentation() {
     for(let i = 0; i < outputPMEs.length; i ++) {
       const ser = outputPMEs[i];
-      if(!ser.eventSenderName || !ser.eventOptionsName) continue;
+      if(!ser.eventSenderName || !ser.eventOptionsName || ser.eventOptionsName === "__type") continue;
       if(!ser.documentation) ser.documentation = "";
       if(ser.documentation.indexOf("- `sender`:") > -1) continue;
       const lines = [];
