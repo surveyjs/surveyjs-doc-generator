@@ -6,6 +6,7 @@ var fs = require("fs");
 var path = require("path");
 var EventDescriptReplacedText = "For information on event handler parameters, refer to descriptions within the interface.";
 var SurveyModelSenderDescription = "A survey instance that raised the event.";
+var CreatorModelSenderDescription = "A Survey Creator instance that raised the event.";
 var DocEntryType;
 (function (DocEntryType) {
     DocEntryType[DocEntryType["unknown"] = 0] = "unknown";
@@ -1103,6 +1104,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         var desc = "";
         if (ser.eventSenderName === "SurveyModel") {
             desc = SurveyModelSenderDescription;
+        }
+        if (ser.eventSenderName.indexOf("Creator") > -1) {
+            desc = CreatorModelSenderDescription;
         }
         lines.push(" - `sender`: `" + ser.eventSenderName + "`" + (!!desc ? "  " : ""));
         if (!!desc) {

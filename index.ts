@@ -4,6 +4,7 @@ import * as path from "path";
 
 const EventDescriptReplacedText = "For information on event handler parameters, refer to descriptions within the interface.";
 const SurveyModelSenderDescription = "A survey instance that raised the event.";
+const CreatorModelSenderDescription = "A Survey Creator instance that raised the event.";
 
 
 enum DocEntryType {unknown, classType, interfaceType, functionType, variableType, enumType};
@@ -1073,6 +1074,9 @@ export function generateDocumentation(
     let desc = "";
     if(ser.eventSenderName === "SurveyModel") {
       desc = SurveyModelSenderDescription;
+    }
+    if(ser.eventSenderName.indexOf("Creator")  > -1) {
+      desc = CreatorModelSenderDescription;
     }
     lines.push(" - `sender`: `"+ ser.eventSenderName + "`" +  (!!desc ? "  " : ""));
     if(!!desc) {
