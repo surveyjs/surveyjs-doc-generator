@@ -639,6 +639,13 @@ function generateDocumentation(fileNames, options, docOptions) {
             type: checker.typeToString(type),
             isPublic: isPublic
         };
+        if (!!type.symbol && !!type.symbol.valueDeclaration && type.symbol.valueDeclaration.kind === ts.SyntaxKind.FunctionExpression) {
+            var signature = checker.getSignatureFromDeclaration(type.symbol.valueDeclaration);
+            var funDetails = serializeSignature(signature);
+            if (funDetails && Array.isArray(funDetails.parameters)) {
+                res.parameters = funDetails.parameters;
+            }
+        }
         var jsTags = symbol.getJsDocTags();
         if (jsTags) {
             var seeArray = [];

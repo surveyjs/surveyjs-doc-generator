@@ -636,12 +636,19 @@ export function generateDocumentation(
     const docParts = symbol.getDocumentationComment(undefined);
     const modifiedFlag = !!symbol.valueDeclaration ? ts.getCombinedModifierFlags(symbol.valueDeclaration) : 0;
     const isPublic = (modifiedFlag & ts.ModifierFlags.Public) !== 0;
-    const res = {
+    const res: any = {
       name: symbol.getName(),
       documentation: !!docParts ? ts.displayPartsToString(docParts) : "",
       type: checker.typeToString(type),
       isPublic: isPublic
     };
+    if(!!type.symbol && !!type.symbol.valueDeclaration && type.symbol.valueDeclaration.kind === ts.SyntaxKind.FunctionExpression) {
+      const signature = checker.getSignatureFromDeclaration(<ts.SignatureDeclaration>type.symbol.valueDeclaration);
+      const funDetails = serializeSignature(signature);
+      if(funDetails && Array.isArray(funDetails.parameters)) {
+          res.parameters = funDetails.parameters
+      }
+  }
     var jsTags = symbol.getJsDocTags();
     if (jsTags) {
       var seeArray = [];

@@ -1,9 +1,9 @@
 var doc = require("./index.js");
 var ts = require("typescript");
 
-
+/* //Creator
 doc.generateDocumentation(["src/entries/index.ts"], { target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS });
-/*
+*/
 
 var Survey = require("../survey-library/build/survey-core/survey.core");
 
@@ -11,7 +11,7 @@ doc.setJsonObj(Survey.Serializer);
 doc.generateDocumentation(["src/entries/chunks/model.ts"], {
     target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
 });
-*/
+
 /*
 doc.generateDocumentation(["src/index.ts"], {
   target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
