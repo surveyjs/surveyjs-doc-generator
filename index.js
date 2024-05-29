@@ -560,7 +560,7 @@ function generateDocumentation(fileNames, options, docOptions) {
                 ser = null;
             }
         }
-        if (node.kind === ts.SyntaxKind.GetAccessor) {
+        if (ser && node.kind === ts.SyntaxKind.GetAccessor) {
             ser.isField = false;
             var serSet = pmesHash[fullName];
             if (serSet) {
