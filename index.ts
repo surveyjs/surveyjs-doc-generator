@@ -587,7 +587,7 @@ export function generateDocumentation(
         ser = null;
       }
     }
-    if (node.kind === ts.SyntaxKind.GetAccessor) {
+    if (ser && node.kind === ts.SyntaxKind.GetAccessor) {
       ser.isField = false;
       let serSet = pmesHash[fullName];
       if (serSet) {
