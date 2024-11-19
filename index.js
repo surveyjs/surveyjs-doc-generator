@@ -20,6 +20,7 @@ var DocEntryType;
 var callbackFuncResultStr = ") => ";
 var isExportingReact = false;
 var jsonObjMetaData = null;
+var stringLiteralTypes = {};
 var tsDefaultOptions = {
     target: ts.ScriptTarget.ES5,
     module: ts.ModuleKind.ES2015,
@@ -356,6 +357,24 @@ function generateDocumentation(fileNames, options, docOptions) {
         else if (node.kind === ts.SyntaxKind.ExportDeclaration) {
             visitExportDeclarationNode(node);
         }
+        else if (node.kind === ts.SyntaxKind.TypeAliasDeclaration) {
+            visitExportTypeAliasNode(node);
+        }
+    }
+    function visitExportTypeAliasNode(node) {
+        var type = checker.getDeclaredTypeOfSymbol(checker.getSymbolAtLocation(node.name));
+        var types = type.types;
+        if (Array.isArray(types) && types.length > 0) {
+            var literals = [];
+            for (var i_1 = 0; i_1 < types.length; i_1++) {
+                if (typeof types[i_1].value === "string") {
+                    literals.push("\"" + types[i_1].value + "\"");
+                }
+            }
+            if (types.length === literals.length) {
+                stringLiteralTypes[node.name.text] = literals.join(" | ");
+            }
+        }
     }
     function visitExportDeclarationNode(node) {
         if (!node.exportClause)
@@ -639,6 +658,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             type: checker.typeToString(type),
             isPublic: isPublic
         };
+        if (stringLiteralTypes[res.type]) {
+            res.type = stringLiteralTypes[res.type];
+        }
         if (!!type.symbol && !!type.symbol.valueDeclaration && type.symbol.valueDeclaration.kind === ts.SyntaxKind.FunctionExpression) {
             var signature = checker.getSignatureFromDeclaration(type.symbol.valueDeclaration);
             var funDetails = serializeSignature(signature);
@@ -1081,8 +1103,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function updateEventsDocumentation() {
-        for (var i_1 = 0; i_1 < outputPMEs.length; i_1++) {
-            var ser = outputPMEs[i_1];
+        for (var i_2 = 0; i_2 < outputPMEs.length; i_2++) {
+            var ser = outputPMEs[i_2];
             if (!ser.eventSenderName || !ser.eventOptionsName || ser.eventOptionsName === "__type")
                 continue;
             if (!ser.documentation)
@@ -1148,14 +1170,14 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!classEntry)
             return;
         if (Array.isArray(classEntry.implements)) {
-            for (var i_2 = 0; i_2 < classEntry.implements.length; i_2++) {
-                fillEventMembers(classEntry.implements[i_2], members);
+            for (var i_3 = 0; i_3 < classEntry.implements.length; i_3++) {
+                fillEventMembers(classEntry.implements[i_3], members);
             }
         }
         if (!Array.isArray(classEntry.members))
             return;
-        for (var i_3 = 0; i_3 < classEntry.members.length; i_3++) {
-            var m = classEntry.members[i_3];
+        for (var i_4 = 0; i_4 < classEntry.members.length; i_4++) {
+            var m = classEntry.members[i_4];
             members[m.name] = m;
         }
     }
@@ -1309,8 +1331,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (importLines.length > 0) {
             lines.unshift("");
         }
-        for (var i_4 = importLines.length - 1; i_4 >= 0; i_4--) {
-            lines.unshift(importLines[i_4]);
+        for (var i_5 = importLines.length - 1; i_5 >= 0; i_5--) {
+            lines.unshift(importLines[i_5]);
         }
     }
     function dtsRenderExportClassFromLibraries(lines, entry) {

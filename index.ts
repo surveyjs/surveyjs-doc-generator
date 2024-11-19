@@ -48,6 +48,7 @@ interface DocEntry {
 const callbackFuncResultStr = ") => ";
 var isExportingReact: boolean = false;
 var jsonObjMetaData: any = null;
+const stringLiteralTypes: any = {};
 const tsDefaultOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES5,
   module: ts.ModuleKind.ES2015,
@@ -379,6 +380,23 @@ export function generateDocumentation(
       ts.forEachChild(node, visit);
     } else if(node.kind === ts.SyntaxKind.ExportDeclaration) {
       visitExportDeclarationNode(<ts.ExportDeclaration>node);
+    } else if(node.kind === ts.SyntaxKind.TypeAliasDeclaration) {
+      visitExportTypeAliasNode(<ts.TypeAliasDeclaration>node);
+    }
+  }
+  function visitExportTypeAliasNode(node: ts.TypeAliasDeclaration) {
+    const type = checker.getDeclaredTypeOfSymbol(checker.getSymbolAtLocation(node.name));
+    const types = (<any>type).types;
+    if(Array.isArray(types) && types.length > 0) {
+      const literals = [];
+      for(let i = 0; i < types.length; i ++) {
+        if(typeof types[i].value === "string") {
+          literals.push("\"" + types[i].value + "\"");
+        }
+      }
+      if(types.length === literals.length) {
+        stringLiteralTypes[node.name.text] = literals.join(" | ");
+      }
     }
   }
   function visitExportDeclarationNode(node: ts.ExportDeclaration) {
@@ -642,6 +660,9 @@ export function generateDocumentation(
       type: checker.typeToString(type),
       isPublic: isPublic
     };
+    if(stringLiteralTypes[res.type]) {
+      res.type = stringLiteralTypes[res.type];
+    }
     if(!!type.symbol && !!type.symbol.valueDeclaration && type.symbol.valueDeclaration.kind === ts.SyntaxKind.FunctionExpression) {
       const signature = checker.getSignatureFromDeclaration(<ts.SignatureDeclaration>type.symbol.valueDeclaration);
       const funDetails = serializeSignature(signature);
