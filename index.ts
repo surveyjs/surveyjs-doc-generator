@@ -17,6 +17,8 @@ interface DocEntry {
   documentation?: string;
   metaTitle?: string;
   metaDescription?: string;
+  isDeprecated?: boolean;
+  deprecationInfo?: string;
   see?: any;
   type?: string;
   baseType?: string;
@@ -679,6 +681,19 @@ export function generateDocumentation(
         }
         if (jsTags[i].name == "description") {
           res["metaDescription"] = jsTags[i].text;
+        }
+        if (jsTags[i].name == "deprecated") {
+          res.isDeprecated = true;
+          let text = jsTags[i].text;
+          if(!!text) {
+            text = text.trim();
+            if(text) {
+              text = "Obsolete. " + text;
+            }
+          }
+          if(!!text) {
+            res.deprecationInfo = text;
+          }
         }
         if (jsTags[i].name == "see") {
           seeArray.push(jsTags[i].text);

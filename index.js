@@ -678,6 +678,19 @@ function generateDocumentation(fileNames, options, docOptions) {
                 if (jsTags[i].name == "description") {
                     res["metaDescription"] = jsTags[i].text;
                 }
+                if (jsTags[i].name == "deprecated") {
+                    res.isDeprecated = true;
+                    var text = jsTags[i].text;
+                    if (!!text) {
+                        text = text.trim();
+                        if (text) {
+                            text = "Obsolete. " + text;
+                        }
+                    }
+                    if (!!text) {
+                        res.deprecationInfo = text;
+                    }
+                }
                 if (jsTags[i].name == "see") {
                     seeArray.push(jsTags[i].text);
                 }
