@@ -167,6 +167,7 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
     if (generateDocs) {
         updateEventsDocumentation();
+        updateHiddenForEntriesDoc();
         // print out the doc
         fs.writeFileSync(process.cwd() + "/docs/classes.json", JSON.stringify(outputClasses, undefined, 4));
         fs.writeFileSync(process.cwd() + "/docs/pmes.json", JSON.stringify(outputPMEs, undefined, 4));
@@ -697,6 +698,15 @@ function generateDocumentation(fileNames, options, docOptions) {
                 if (jsTags[i].name == "returns") {
                     res["returnDocumentation"] = jsTags[i].text;
                 }
+                if (jsTags[i].name == "hidefor") {
+                    var hideFor = jsTags[i].text;
+                    if (!!hideFor) {
+                        var hideForVal = hideFor.split(",").map(function (item) { return item.trim(); });
+                        if (hideForVal.length > 0) {
+                            res["hideForClasses"] = hideForVal;
+                        }
+                    }
+                }
             }
             if (seeArray.length > 0) {
                 res["see"] = seeArray;
@@ -1140,6 +1150,29 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
         }
     }
+    function updateHiddenForEntriesDoc() {
+        var _loop_1 = function (i_3) {
+            var ser = outputPMEs[i_3];
+            if (Array.isArray(ser.hideForClasses)) {
+                ser.hideForClasses.forEach(function (className) {
+                    var classEntry = classesHash[className];
+                    if (!classEntry)
+                        return;
+                    var entry = classEntry.members.find(function (item) { item.name === ser.name; });
+                    if (!entry) {
+                        entry = JSON.parse(JSON.stringify(ser));
+                        classEntry.members.push(entry);
+                    }
+                    entry.className = className;
+                    entry.isPublic = false;
+                    entry.documentation = "";
+                });
+            }
+        };
+        for (var i_3 = 0; i_3 < outputPMEs.length; i_3++) {
+            _loop_1(i_3);
+        }
+    }
     function updateEventDocumentationSender(ser, lines) {
         if (!ser.eventSenderName)
             return;
@@ -1183,14 +1216,14 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!classEntry)
             return;
         if (Array.isArray(classEntry.implements)) {
-            for (var i_3 = 0; i_3 < classEntry.implements.length; i_3++) {
-                fillEventMembers(classEntry.implements[i_3], members);
+            for (var i_4 = 0; i_4 < classEntry.implements.length; i_4++) {
+                fillEventMembers(classEntry.implements[i_4], members);
             }
         }
         if (!Array.isArray(classEntry.members))
             return;
-        for (var i_4 = 0; i_4 < classEntry.members.length; i_4++) {
-            var m = classEntry.members[i_4];
+        for (var i_5 = 0; i_5 < classEntry.members.length; i_5++) {
+            var m = classEntry.members[i_5];
             members[m.name] = m;
         }
     }
@@ -1222,7 +1255,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             { regex: /(?<=export declare class)(.*)(?=implements)/gm, type: DocEntryType.classType },
             { regex: /(?<=export declare class)(.*)(?=<)/gm, type: DocEntryType.classType }];
         var removedWords = [" extends ", "<"];
-        var _loop_1 = function () {
+        var _loop_2 = function () {
             var item = regExStrs[i];
             var mathArray = text.match(item.regex);
             if (!Array.isArray(mathArray))
@@ -1240,7 +1273,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             });
         };
         for (var i = 0; i < regExStrs.length; i++) {
-            _loop_1();
+            _loop_2();
         }
     }
     function prepareDtsInfo() {
@@ -1344,8 +1377,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (importLines.length > 0) {
             lines.unshift("");
         }
-        for (var i_5 = importLines.length - 1; i_5 >= 0; i_5--) {
-            lines.unshift(importLines[i_5]);
+        for (var i_6 = importLines.length - 1; i_6 >= 0; i_6--) {
+            lines.unshift(importLines[i_6]);
         }
     }
     function dtsRenderExportClassFromLibraries(lines, entry) {

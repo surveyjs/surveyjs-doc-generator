@@ -30,6 +30,7 @@ interface DocEntry {
   returnType?: string;
   returnDocumentation?: string;
   returnTypeGenerics?: string[];
+  hideForClasses?: string[];
   typeGenerics?: string[];
   pmeType?: string;
   hasSet?: boolean;
@@ -202,6 +203,7 @@ export function generateDocumentation(
   }
   if(generateDocs) {
     updateEventsDocumentation();
+    updateHiddenForEntriesDoc();
     // print out the doc
     fs.writeFileSync(
       process.cwd() + "/docs/classes.json",
@@ -701,6 +703,15 @@ export function generateDocumentation(
         if (jsTags[i].name == "returns") {
           res["returnDocumentation"] = jsTags[i].text;
         }
+        if (jsTags[i].name == "hidefor") {
+          const hideFor = jsTags[i].text;
+          if(!!hideFor) {
+            const hideForVal = hideFor.split(",").map((item: string) => item.trim());
+            if(hideForVal.length > 0) {
+              res["hideForClasses"] = hideForVal;
+            }
+          }
+        }
       }
       if (seeArray.length > 0) {
         res["see"] = seeArray;
@@ -1109,6 +1120,25 @@ export function generateDocumentation(
       } else {
         lines.unshift("");
         ser.documentation += lines.join("\n");
+      }
+    }
+  }
+  function updateHiddenForEntriesDoc() {
+    for(let i = 0; i < outputPMEs.length; i ++) {
+      const ser = outputPMEs[i];
+      if(Array.isArray(ser.hideForClasses)) {
+        ser.hideForClasses.forEach((className: string) => {
+          const classEntry = classesHash[className];
+          if(!classEntry) return;
+          let entry = classEntry.members.find((item: DocEntry) => { item.name === ser.name; });
+          if(!entry) {
+            entry = JSON.parse(JSON.stringify(ser));
+            classEntry.members.push(entry);
+          }
+          entry.className = className;
+          entry.isPublic = false;
+          entry.documentation = "";
+      });
       }
     }
   }
