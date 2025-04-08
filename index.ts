@@ -1124,6 +1124,7 @@ export function generateDocumentation(
     }
   }
   function updateHiddenForEntriesDoc() {
+    const addedEntries: DocEntry[] = [];
     for(let i = 0; i < outputPMEs.length; i ++) {
       const ser = outputPMEs[i];
       if(Array.isArray(ser.hideForClasses)) {
@@ -1134,6 +1135,7 @@ export function generateDocumentation(
           if(!entry) {
             entry = JSON.parse(JSON.stringify(ser));
             classEntry.members.push(entry);
+            addedEntries.push(entry);
           }
           entry.className = className;
           entry.isPublic = false;
@@ -1141,6 +1143,9 @@ export function generateDocumentation(
       });
       }
     }
+    addedEntries.forEach((entry: DocEntry) => {
+      outputPMEs.push(entry);
+    });
   }
   function updateEventDocumentationSender(ser: DocEntry, lines: Array<string>) {
     if(!ser.eventSenderName) return;

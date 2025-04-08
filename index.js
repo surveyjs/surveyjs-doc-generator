@@ -1151,6 +1151,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function updateHiddenForEntriesDoc() {
+        var addedEntries = [];
         var _loop_1 = function (i_3) {
             var ser = outputPMEs[i_3];
             if (Array.isArray(ser.hideForClasses)) {
@@ -1162,6 +1163,7 @@ function generateDocumentation(fileNames, options, docOptions) {
                     if (!entry) {
                         entry = JSON.parse(JSON.stringify(ser));
                         classEntry.members.push(entry);
+                        addedEntries.push(entry);
                     }
                     entry.className = className;
                     entry.isPublic = false;
@@ -1172,6 +1174,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var i_3 = 0; i_3 < outputPMEs.length; i_3++) {
             _loop_1(i_3);
         }
+        addedEntries.forEach(function (entry) {
+            outputPMEs.push(entry);
+        });
     }
     function updateEventDocumentationSender(ser, lines) {
         if (!ser.eventSenderName)
