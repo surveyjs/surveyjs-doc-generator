@@ -31,6 +31,7 @@ interface DocEntry {
   returnDocumentation?: string;
   returnTypeGenerics?: string[];
   hideForClasses?: string[];
+  isHidden?: boolean;
   typeGenerics?: string[];
   pmeType?: string;
   hasSet?: boolean;
@@ -1138,7 +1139,7 @@ export function generateDocumentation(
             addedEntries.push(entry);
           }
           entry.className = className;
-          entry.isPublic = false;
+          entry.isHidden = true;
           entry.documentation = "";
       });
       }

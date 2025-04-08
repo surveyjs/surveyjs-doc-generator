@@ -1166,7 +1166,7 @@ function generateDocumentation(fileNames, options, docOptions) {
                         addedEntries.push(entry);
                     }
                     entry.className = className;
-                    entry.isPublic = false;
+                    entry.isHidden = true;
                     entry.documentation = "";
                 });
             }
