@@ -588,7 +588,9 @@ export function generateDocumentation(
     if (isSurveyEventType(ser.type)) {
       ser.pmeType = "event";
       updateEventOptionInterfaceName(node, ser);
-      if (!ser.documentation && (ser.eventSenderName === "__type" || !ser.eventOptionsName)) {
+      //if (!ser.documentation && (ser.eventSenderName === "__type" || !ser.eventOptionsName)) {
+      //Remove any event if there is no documentation 
+      if (!ser.documentation) {
         ser = null;
       }
     }
