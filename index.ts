@@ -886,6 +886,9 @@ export function generateDocumentation(
     );
     const funDetails = serializeSignature(signature);
     entry.parameters = funDetails.parameters;
+    if (entry.parameters && entry.parameters.length > 0) {
+      addNestedParameters(entry.parameters, node);
+    }
     entry.returnType = funDetails.returnType;
     entry.typeGenerics = getTypedParameters(node, false);
     entry.returnTypeGenerics = getTypedParameters((<ts.SignatureDeclaration>node).type, true);
@@ -933,6 +936,21 @@ export function generateDocumentation(
       }
     }
     return res;
+  }
+  function addNestedParameters(parameters: DocEntry[], node: any) {
+    if (node.jsDoc && node.jsDoc.length > 0) {
+      const jsDoc = node.jsDoc[0];
+      if (jsDoc.tags) {
+        jsDoc.tags.forEach((tag: any) => {
+          if (tag.tagName.text === "param" && tag.typeExpression && tag.name && tag.name.left && tag.name.right) {
+            const paramName = tag.name.left.text;
+            const nextedParam = tag.name.right.text;
+            const paramType = checker.getTypeAtLocation(tag.typeExpression.type);
+            parameters.push({ name: paramName + "." + nextedParam, type: checker.typeToString(paramType), documentation: tag.comment });
+          }
+        });
+      }
+    }
   }
   function getReturnType(signature: ts.Signature): string {
     var res = checker.typeToString(signature.getReturnType());

@@ -895,6 +895,9 @@ function generateDocumentation(fileNames, options, docOptions) {
         var signature = checker.getSignatureFromDeclaration(node);
         var funDetails = serializeSignature(signature);
         entry.parameters = funDetails.parameters;
+        if (entry.parameters && entry.parameters.length > 0) {
+            addNestedParameters(entry.parameters, node);
+        }
         entry.returnType = funDetails.returnType;
         entry.typeGenerics = getTypedParameters(node, false);
         entry.returnTypeGenerics = getTypedParameters(node.type, true);
@@ -946,6 +949,21 @@ function generateDocumentation(fileNames, options, docOptions) {
             }
         }
         return res;
+    }
+    function addNestedParameters(parameters, node) {
+        if (node.jsDoc && node.jsDoc.length > 0) {
+            var jsDoc = node.jsDoc[0];
+            if (jsDoc.tags) {
+                jsDoc.tags.forEach(function (tag) {
+                    if (tag.tagName.text === "param" && tag.typeExpression && tag.name && tag.name.left && tag.name.right) {
+                        var paramName = tag.name.left.text;
+                        var nextedParam = tag.name.right.text;
+                        var paramType = checker.getTypeAtLocation(tag.typeExpression.type);
+                        parameters.push({ name: paramName + "." + nextedParam, type: checker.typeToString(paramType), documentation: tag.comment });
+                    }
+                });
+            }
+        }
     }
     function getReturnType(signature) {
         var res = checker.typeToString(signature.getReturnType());
