@@ -477,7 +477,6 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (!entry.members)
                 entry.members = [];
             entry.members.push(memberEntry);
-            entry.members.push(memberEntry);
             if (generateDocs) {
                 if (entry.entryType === DocEntryType.variableType) {
                     outputPMEs.push(memberEntry);
@@ -554,7 +553,9 @@ function generateDocumentation(fileNames, options, docOptions) {
             fullName = curClass.name + "." + fullName;
             if (!curClass.members)
                 curClass.members = [];
-            curClass.members.push(ser);
+            if (!hasMembers(curClass, ser.name)) {
+                curClass.members.push(ser);
+            }
         }
         ser.pmeType = getPMEType(node.kind);
         var modifier = ts.getCombinedModifierFlags(node);
@@ -608,6 +609,15 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (ser && ser.name === "getType") {
             curJsonName = getJsonTypeName(node);
         }
+    }
+    function hasMembers(entry, name) {
+        if (!entry || !Array.isArray(entry.members))
+            return false;
+        for (var i = 0; i < entry.members.length; i++) {
+            if (entry.members[i].name === name)
+                return true;
+        }
+        return false;
     }
     function getJsonTypeName(node) {
         var body = node.getFullText();

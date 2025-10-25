@@ -491,7 +491,6 @@ export function generateDocumentation(
     if(memberEntry) {
       if(!entry.members) entry.members = [];
       entry.members.push(memberEntry);
-      entry.members.push(memberEntry);
       if(generateDocs) {
           if(entry.entryType === DocEntryType.variableType) {
               outputPMEs.push(memberEntry);
@@ -566,7 +565,9 @@ export function generateDocumentation(
       ser.jsonName = curClass.jsonName;
       fullName = curClass.name + "." + fullName;
       if(!curClass.members) curClass.members = [];
-      curClass.members.push(ser);
+      if (!hasMembers(curClass, ser.name)) {
+        curClass.members.push(ser);
+      }
     }
     ser.pmeType = getPMEType(node.kind);
     const modifier = ts.getCombinedModifierFlags(<ts.Declaration>node);
@@ -617,6 +618,13 @@ export function generateDocumentation(
     if (ser && ser.name === "getType") {
       curJsonName = getJsonTypeName(<ts.FunctionDeclaration>node);
     }
+  }
+  function hasMembers(entry: DocEntry, name: string): boolean {
+    if(!entry || !Array.isArray(entry.members)) return false;
+    for(var i = 0; i < entry.members.length; i ++) {
+      if(entry.members[i].name === name) return true;
+    }
+    return false;
   }
   function getJsonTypeName(node: ts.FunctionDeclaration): string {
     let body = (<ts.FunctionDeclaration>node).getFullText();
