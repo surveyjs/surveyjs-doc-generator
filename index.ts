@@ -517,20 +517,52 @@ export function generateDocumentation(
     if (!curJsonName) return;
     curClass.jsonName = curJsonName;
     if (!jsonObjMetaData || !generateDocs) return;
-    var properties = jsonObjMetaData.getProperties(curJsonName);
-    for (var i = 0; i < outputPMEs.length; i++) {
-      if (outputPMEs[i].className == curClass.name) {
-        var propName = outputPMEs[i].name;
-        for (var j = 0; j < properties.length; j++) {
-          if (properties[j].name == propName) {
-            outputPMEs[i].isSerialized = true;
-            if (properties[j].defaultValue)
-              outputPMEs[i].defaultValue = properties[j].defaultValue;
-            if (properties[j].choices)
-              outputPMEs[i].serializedChoices = properties[j].choices;
-            if (properties[j].className)
-              outputPMEs[i].jsonClassName = properties[j].className;
-            break;
+    const properties = jsonObjMetaData.getProperties(curJsonName);
+    const classInfo = jsonObjMetaData.findClass(curJsonName);
+    const hiddenProps = {};
+    const parentHiddenClasses = [];
+    for (let i = 0; i < properties.length; i++) {
+      const prop = properties[i];
+      if (prop.visible === false && !!classInfo.parentName) {
+        const parentProp = jsonObjMetaData.findProperty(classInfo.parentName, prop.name);
+        if (parentProp && parentProp.visible !== false) {
+          let parentClassInfo = jsonObjMetaData.findClass(classInfo.parentName);
+          while (parentClassInfo && parentClassInfo.parentName && !!jsonObjMetaData.findProperty(parentClassInfo.parentName, prop.name)) {
+            parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.parentName);
+          }
+          if (parentHiddenClasses.indexOf(parentClassInfo.name) < 0) {
+            parentHiddenClasses.push(parentClassInfo.name);
+          }
+          hiddenProps[prop.name] = parentClassInfo.name;
+        }
+      }
+    }
+    for (let i = 0; i < outputPMEs.length; i++) {
+      const pme = outputPMEs[i];
+      if (pme.pmeType !== "property") continue;
+      if (parentHiddenClasses.length > 0 && classesHash[pme.className]) {
+        const pmeJsonName = pme.jsonName || classesHash[pme.className].jsonName;
+        if (parentHiddenClasses.indexOf(pmeJsonName) > -1) {
+          if (hiddenProps[pme.name] === pmeJsonName) {
+            if (!Array.isArray(pme.hideForClasses)) {
+              pme.hideForClasses = [];
+            }
+            pme.hideForClasses.push(curClass.name);
+          }
+        }
+      }
+      if (pme.className == curClass.name) {
+        const prop = jsonObjMetaData.findProperty(curJsonName, pme.name);
+        if (!!prop) {
+          pme.isSerialized = true;
+          if (prop.defaultValue) {
+            pme.defaultValue = prop.defaultValue;
+          }
+          if (prop.choices) {
+            pme.serializedChoices = prop.choices;
+          }
+          if (prop.className) {
+            pme.jsonClassName = prop.className;
           }
         }
       }

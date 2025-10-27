@@ -507,19 +507,52 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!jsonObjMetaData || !generateDocs)
             return;
         var properties = jsonObjMetaData.getProperties(curJsonName);
-        for (var i = 0; i < outputPMEs.length; i++) {
-            if (outputPMEs[i].className == curClass.name) {
-                var propName = outputPMEs[i].name;
-                for (var j = 0; j < properties.length; j++) {
-                    if (properties[j].name == propName) {
-                        outputPMEs[i].isSerialized = true;
-                        if (properties[j].defaultValue)
-                            outputPMEs[i].defaultValue = properties[j].defaultValue;
-                        if (properties[j].choices)
-                            outputPMEs[i].serializedChoices = properties[j].choices;
-                        if (properties[j].className)
-                            outputPMEs[i].jsonClassName = properties[j].className;
-                        break;
+        var classInfo = jsonObjMetaData.findClass(curJsonName);
+        var hiddenProps = {};
+        var parentHiddenClasses = [];
+        for (var i_2 = 0; i_2 < properties.length; i_2++) {
+            var prop = properties[i_2];
+            if (prop.visible === false && !!classInfo.parentName) {
+                var parentProp = jsonObjMetaData.findProperty(classInfo.parentName, prop.name);
+                if (parentProp && parentProp.visible !== false) {
+                    var parentClassInfo = jsonObjMetaData.findClass(classInfo.parentName);
+                    while (parentClassInfo && parentClassInfo.parentName && !!jsonObjMetaData.findProperty(parentClassInfo.parentName, prop.name)) {
+                        parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.parentName);
+                    }
+                    if (parentHiddenClasses.indexOf(parentClassInfo.name) < 0) {
+                        parentHiddenClasses.push(parentClassInfo.name);
+                    }
+                    hiddenProps[prop.name] = parentClassInfo.name;
+                }
+            }
+        }
+        for (var i_3 = 0; i_3 < outputPMEs.length; i_3++) {
+            var pme = outputPMEs[i_3];
+            if (pme.pmeType !== "property")
+                continue;
+            if (parentHiddenClasses.length > 0 && classesHash[pme.className]) {
+                var pmeJsonName = pme.jsonName || classesHash[pme.className].jsonName;
+                if (parentHiddenClasses.indexOf(pmeJsonName) > -1) {
+                    if (hiddenProps[pme.name] === pmeJsonName) {
+                        if (!Array.isArray(pme.hideForClasses)) {
+                            pme.hideForClasses = [];
+                        }
+                        pme.hideForClasses.push(curClass.name);
+                    }
+                }
+            }
+            if (pme.className == curClass.name) {
+                var prop = jsonObjMetaData.findProperty(curJsonName, pme.name);
+                if (!!prop) {
+                    pme.isSerialized = true;
+                    if (prop.defaultValue) {
+                        pme.defaultValue = prop.defaultValue;
+                    }
+                    if (prop.choices) {
+                        pme.serializedChoices = prop.choices;
+                    }
+                    if (prop.className) {
+                        pme.jsonClassName = prop.className;
                     }
                 }
             }
@@ -1156,8 +1189,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         }
     }
     function updateEventsDocumentation() {
-        for (var i_2 = 0; i_2 < outputPMEs.length; i_2++) {
-            var ser = outputPMEs[i_2];
+        for (var i_4 = 0; i_4 < outputPMEs.length; i_4++) {
+            var ser = outputPMEs[i_4];
             if (!ser.eventSenderName || !ser.eventOptionsName || ser.eventOptionsName === "__type")
                 continue;
             if (!ser.documentation)
@@ -1182,8 +1215,8 @@ function generateDocumentation(fileNames, options, docOptions) {
     }
     function updateHiddenForEntriesDoc() {
         var addedEntries = [];
-        var _loop_1 = function (i_3) {
-            var ser = outputPMEs[i_3];
+        var _loop_1 = function (i_5) {
+            var ser = outputPMEs[i_5];
             if (Array.isArray(ser.hideForClasses)) {
                 ser.hideForClasses.forEach(function (className) {
                     var classEntry = classesHash[className];
@@ -1201,8 +1234,8 @@ function generateDocumentation(fileNames, options, docOptions) {
                 });
             }
         };
-        for (var i_3 = 0; i_3 < outputPMEs.length; i_3++) {
-            _loop_1(i_3);
+        for (var i_5 = 0; i_5 < outputPMEs.length; i_5++) {
+            _loop_1(i_5);
         }
         addedEntries.forEach(function (entry) {
             outputPMEs.push(entry);
@@ -1251,14 +1284,14 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (!classEntry)
             return;
         if (Array.isArray(classEntry.implements)) {
-            for (var i_4 = 0; i_4 < classEntry.implements.length; i_4++) {
-                fillEventMembers(classEntry.implements[i_4], members);
+            for (var i_6 = 0; i_6 < classEntry.implements.length; i_6++) {
+                fillEventMembers(classEntry.implements[i_6], members);
             }
         }
         if (!Array.isArray(classEntry.members))
             return;
-        for (var i_5 = 0; i_5 < classEntry.members.length; i_5++) {
-            var m = classEntry.members[i_5];
+        for (var i_7 = 0; i_7 < classEntry.members.length; i_7++) {
+            var m = classEntry.members[i_7];
             members[m.name] = m;
         }
     }
@@ -1412,8 +1445,8 @@ function generateDocumentation(fileNames, options, docOptions) {
         if (importLines.length > 0) {
             lines.unshift("");
         }
-        for (var i_6 = importLines.length - 1; i_6 >= 0; i_6--) {
-            lines.unshift(importLines[i_6]);
+        for (var i_8 = importLines.length - 1; i_8 >= 0; i_8--) {
+            lines.unshift(importLines[i_8]);
         }
     }
     function dtsRenderExportClassFromLibraries(lines, entry) {
