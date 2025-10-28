@@ -524,9 +524,14 @@ export function generateDocumentation(
     for (let i = 0; i < properties.length; i++) {
       const prop = properties[i];
       if (prop.visible === false && !!classInfo.parentName) {
-        const parentProp = jsonObjMetaData.findProperty(classInfo.parentName, prop.name);
+        let parentClassInfo = jsonObjMetaData.findClass(classInfo.parentName);
+        let parentProp = jsonObjMetaData.findProperty(parentClassInfo.name, prop.name);
+        while (parentClassInfo && parentClassInfo.parentName && !!parentProp && parentProp === prop) {
+          parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.parentName);
+          parentProp = jsonObjMetaData.findProperty(parentClassInfo.name, prop.name);
+        }
         if (parentProp && parentProp.visible !== false) {
-          let parentClassInfo = jsonObjMetaData.findClass(classInfo.parentName);
+          parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.name);
           while (parentClassInfo && parentClassInfo.parentName && !!jsonObjMetaData.findProperty(parentClassInfo.parentName, prop.name)) {
             parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.parentName);
           }

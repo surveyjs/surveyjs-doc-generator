@@ -513,9 +513,14 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var i_2 = 0; i_2 < properties.length; i_2++) {
             var prop = properties[i_2];
             if (prop.visible === false && !!classInfo.parentName) {
-                var parentProp = jsonObjMetaData.findProperty(classInfo.parentName, prop.name);
+                var parentClassInfo = jsonObjMetaData.findClass(classInfo.parentName);
+                var parentProp = jsonObjMetaData.findProperty(parentClassInfo.name, prop.name);
+                while (parentClassInfo && parentClassInfo.parentName && !!parentProp && parentProp === prop) {
+                    parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.parentName);
+                    parentProp = jsonObjMetaData.findProperty(parentClassInfo.name, prop.name);
+                }
                 if (parentProp && parentProp.visible !== false) {
-                    var parentClassInfo = jsonObjMetaData.findClass(classInfo.parentName);
+                    parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.name);
                     while (parentClassInfo && parentClassInfo.parentName && !!jsonObjMetaData.findProperty(parentClassInfo.parentName, prop.name)) {
                         parentClassInfo = jsonObjMetaData.findClass(parentClassInfo.parentName);
                     }
