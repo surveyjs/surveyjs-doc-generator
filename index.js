@@ -549,7 +549,7 @@ function generateDocumentation(fileNames, options, docOptions) {
             if (pme.className == curClass.name) {
                 var prop = jsonObjMetaData.findProperty(curJsonName, pme.name);
                 if (!!prop) {
-                    pme.isSerialized = true;
+                    pme.isSerialized = prop.isSerializable !== false;
                     if (prop.defaultValue) {
                         pme.defaultValue = prop.defaultValue;
                     }
