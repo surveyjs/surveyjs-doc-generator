@@ -848,8 +848,21 @@ function generateDocumentation(fileNames, options, docOptions) {
     function getBaseType(firstHeritageClauseType) {
         if (!firstHeritageClauseType)
             return "";
-        var extendsType = checker.getTypeAtLocation(firstHeritageClauseType.expression);
         var expression = firstHeritageClauseType.expression;
+        // Handle mixin pattern: extends mixinFunction(BaseClass)
+        if (expression.kind === ts.SyntaxKind.CallExpression && expression.arguments && expression.arguments.length > 0) {
+            var arg = expression.arguments[0];
+            var argType = checker.getTypeAtLocation(arg);
+            if (argType && argType.symbol) {
+                return argType.symbol.name;
+            }
+            if (arg.escapedText)
+                return arg.escapedText;
+            if (arg.text)
+                return arg.text;
+            return "";
+        }
+        var extendsType = checker.getTypeAtLocation(firstHeritageClauseType.expression);
         if (extendsType && extendsType.symbol) {
             var name_4 = extendsType.symbol.name;
             if (!!expression.expression && expression.expression.escapedText)

@@ -846,10 +846,21 @@ export function generateDocumentation(
   }
   function getBaseType(firstHeritageClauseType: ts.ExpressionWithTypeArguments): string {
     if(!firstHeritageClauseType) return "";
+    const expression: any = firstHeritageClauseType.expression;
+    // Handle mixin pattern: extends mixinFunction(BaseClass)
+    if(expression.kind === ts.SyntaxKind.CallExpression && expression.arguments && expression.arguments.length > 0) {
+      const arg = expression.arguments[0];
+      const argType = checker.getTypeAtLocation(arg);
+      if(argType && argType.symbol) {
+        return argType.symbol.name;
+      }
+      if(arg.escapedText) return arg.escapedText;
+      if(arg.text) return arg.text;
+      return "";
+    }
     const extendsType = checker.getTypeAtLocation(
       firstHeritageClauseType.expression
     );
-    const expression: any = firstHeritageClauseType.expression;
     if (extendsType && extendsType.symbol) {
       const name = extendsType.symbol.name;
       if(!!expression.expression && expression.expression.escapedText)
