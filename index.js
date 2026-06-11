@@ -748,6 +748,9 @@ function generateDocumentation(fileNames, options, docOptions) {
                 if (jsTags[i].name == "returns") {
                     res["returnDocumentation"] = jsTags[i].text;
                 }
+                if (jsTags[i].name == "hidden") {
+                    res.isHidden = true;
+                }
                 if (jsTags[i].name == "hidefor") {
                     var hideFor = jsTags[i].text;
                     if (!!hideFor) {
@@ -1237,18 +1240,15 @@ function generateDocumentation(fileNames, options, docOptions) {
             var ser = outputPMEs[i_5];
             if (Array.isArray(ser.hideForClasses)) {
                 ser.hideForClasses.forEach(function (className) {
-                    var classEntry = classesHash[className];
-                    if (!classEntry)
-                        return;
-                    var entry = classEntry.members.find(function (item) { item.name === ser.name; });
-                    if (!entry) {
-                        entry = JSON.parse(JSON.stringify(ser));
-                        classEntry.members.push(entry);
-                        addedEntries.push(entry);
+                    hideEntryForClass(ser, className, addedEntries);
+                });
+            }
+            if (ser.isHidden === true && !!ser.className) {
+                outputClasses.forEach(function (cls) {
+                    if (cls.name !== ser.className && Array.isArray(cls.allTypes)
+                        && cls.allTypes.indexOf(ser.className) > -1) {
+                        hideEntryForClass(ser, cls.name, addedEntries);
                     }
-                    entry.className = className;
-                    entry.isHidden = true;
-                    entry.documentation = "";
                 });
             }
         };
@@ -1258,6 +1258,23 @@ function generateDocumentation(fileNames, options, docOptions) {
         addedEntries.forEach(function (entry) {
             outputPMEs.push(entry);
         });
+    }
+    function hideEntryForClass(ser, className, addedEntries) {
+        var classEntry = classesHash[className];
+        if (!classEntry)
+            return;
+        if (!Array.isArray(classEntry.members)) {
+            classEntry.members = [];
+        }
+        var entry = classEntry.members.find(function (item) { return item.name === ser.name; });
+        if (!entry) {
+            entry = JSON.parse(JSON.stringify(ser));
+            classEntry.members.push(entry);
+            addedEntries.push(entry);
+        }
+        entry.className = className;
+        entry.isHidden = true;
+        entry.documentation = "";
     }
     function updateEventDocumentationSender(ser, lines) {
         if (!ser.eventSenderName)
@@ -1282,7 +1299,7 @@ function generateDocumentation(fileNames, options, docOptions) {
         for (var key_1 in members) {
             var m = members[key_1];
             var doc = m.documentation;
-            if (isHiddenEntryByDoc(doc))
+            if (m.isHidden === true || isHiddenEntryByDoc(doc))
                 continue;
             lines.push("- `options." + m.name + "`: `" + m.type + "`" + (!!doc ? "  " : ""));
             if (!!doc) {

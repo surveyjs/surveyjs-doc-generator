@@ -751,6 +751,9 @@ export function generateDocumentation(
         if (jsTags[i].name == "returns") {
           res["returnDocumentation"] = jsTags[i].text;
         }
+        if (jsTags[i].name == "hidden") {
+          res.isHidden = true;
+        }
         if (jsTags[i].name == "hidefor") {
           const hideFor = jsTags[i].text;
           if(!!hideFor) {
@@ -1206,23 +1209,37 @@ export function generateDocumentation(
       const ser = outputPMEs[i];
       if(Array.isArray(ser.hideForClasses)) {
         ser.hideForClasses.forEach((className: string) => {
-          const classEntry = classesHash[className];
-          if(!classEntry) return;
-          let entry = classEntry.members.find((item: DocEntry) => { item.name === ser.name; });
-          if(!entry) {
-            entry = JSON.parse(JSON.stringify(ser));
-            classEntry.members.push(entry);
-            addedEntries.push(entry);
+          hideEntryForClass(ser, className, addedEntries);
+        });
+      }
+      if(ser.isHidden === true && !!ser.className) {
+        outputClasses.forEach((cls: DocEntry) => {
+          if(cls.name !== ser.className && Array.isArray(cls.allTypes)
+            && cls.allTypes.indexOf(ser.className) > -1) {
+            hideEntryForClass(ser, cls.name, addedEntries);
           }
-          entry.className = className;
-          entry.isHidden = true;
-          entry.documentation = "";
-      });
+        });
       }
     }
     addedEntries.forEach((entry: DocEntry) => {
       outputPMEs.push(entry);
     });
+  }
+  function hideEntryForClass(ser: DocEntry, className: string, addedEntries: DocEntry[]) {
+    const classEntry = classesHash[className];
+    if(!classEntry) return;
+    if(!Array.isArray(classEntry.members)) {
+      classEntry.members = [];
+    }
+    let entry = classEntry.members.find((item: DocEntry) => item.name === ser.name);
+    if(!entry) {
+      entry = JSON.parse(JSON.stringify(ser));
+      classEntry.members.push(entry);
+      addedEntries.push(entry);
+    }
+    entry.className = className;
+    entry.isHidden = true;
+    entry.documentation = "";
   }
   function updateEventDocumentationSender(ser: DocEntry, lines: Array<string>) {
     if(!ser.eventSenderName) return;
@@ -1245,7 +1262,7 @@ export function generateDocumentation(
     for(let key in members) {
       const m = members[key];
       let doc = m.documentation;
-      if(isHiddenEntryByDoc(doc)) continue;
+      if(m.isHidden === true || isHiddenEntryByDoc(doc)) continue;
       lines.push("- `options." + m.name + "`: `" + m.type + "`" +  (!!doc ? "  " : ""));
       if(!!doc) {
         lines.push(doc);
