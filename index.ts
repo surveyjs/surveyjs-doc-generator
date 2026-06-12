@@ -45,12 +45,9 @@ interface DocEntry {
   isSerialized?: boolean;
   defaultValue?: any;
   serializedChoices?: any[];
-  moduleName?: string;
   eventSenderName?: string;
   eventOptionsName?: string;
 }
-const callbackFuncResultStr = ") => ";
-var isExportingReact: boolean = false;
 var jsonObjMetaData: any = null;
 const stringLiteralTypes: any = {};
 const tsDefaultOptions: ts.CompilerOptions = {
@@ -99,56 +96,11 @@ function getAbsoluteFileName(name: string): string {
   return path.join(process.cwd(), name);
 }
 
-export interface IDtsBundleOptions {
-  entries: string[],
-  out: string,
-  name: string,
-  license: string,
-  excludeImports? : boolean,
-  paths?: ts.MapLike<string[]>
-}
-
-export function generateDts(options: IDtsBundleOptions) {
-  if(!options.out) {
-    printError("out is empty.");
-    return;
-  }
-  let outDir = path.dirname(options.out);
-  if(!checkFiles([outDir], "directory for out file is not found")) return;
-  const docOptions = {
-    generateDoc: false,
-    generateJSONDefinition: false,
-    dtsOutput: options.out,
-    dtsExcludeImports: options.excludeImports === true,
-    paths: options.paths,
-    name: options.name,
-    license: options.license,
-  };
-  const tsOptions: ts.CompilerOptions = {};
-  if(options.paths) {
-    tsOptions.paths = options.paths;
-    tsOptions.baseUrl = process.cwd();
-  }
-  generateDocumentation(options.entries, tsOptions, docOptions);
-  if(!checkFiles([options.out], "Generated d.ts file is not found")) return;
-
-  const program = ts.createProgram([options.out], getTsOptions(tsOptions));
-  const srcFile = program.getSourceFile(options.out);
-  const diagnostics = program.getSyntacticDiagnostics(srcFile);
-  for(var i = 0; i < diagnostics.length; i ++) {
-    const msgText: any = diagnostics[i].messageText;
-    let errorText = "Error: "  + (!!msgText.messageText? msgText.messageText: msgText);
-    if(!!diagnostics[i].source) {
-      errorText += " . Source: " + diagnostics[i].source;
-    }
-    printError(errorText);
-  }
-}
 /** Generate documentation for all classes in a set of .ts files */
 export function generateDocumentation(
   fileNames: string[], options: ts.CompilerOptions, docOptions: any = {}
 ): void {
-  let dtsVueGeneratedFiles = [];
+  let vueGeneratedFiles = [];
   generateVueTSFiles(fileNames);
   const tsOptions: ts.CompilerOptions = getTsOptions(options);
   if(!checkFiles(fileNames, "File for compiling is not found")) return;
@@ -165,27 +117,8 @@ export function generateDocumentation(
   let curClass: DocEntry = null;
   let curJsonName: string = null;
   let generateJSONDefinitionClasses = {};
-  let dtsOutput = !!docOptions ? docOptions.dtsOutput : undefined;
-  let generateDts = !!dtsOutput;
   let generateJSONDefinition = docOptions.generateJSONDefinition === true;
-  let generateDocs = !generateDts || docOptions.generateDoc !== false;
   let outputDefinition = {};
-  let dtsExportedClasses = {}
-  let dtsExportClassesFromLibraries = [];
-  let dtsImports = {};
-  let dtsExcludeImports = docOptions.dtsExcludeImports === true;
-  const dtsExportNames = [];
-  if(!!docOptions.paths) {
-    for(key in docOptions.paths) dtsExportNames.push(key);
-  }
-  let dtsImportDeclarations = {};
-  let dtsFrameworksImportDeclarations = {};
-  let dtsDeclarations = {};
-  let dtsTypesParameters = {};
-  let dtsTypesArgumentParameters = {};
-  let dtsProductName = docOptions.name;
-  let dtsLicense = docOptions.license;
-  let dtsVersion = "";
   // Visit every sourceFile in the program
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.fileName.indexOf("node_modules") > 0) continue;
@@ -202,19 +135,17 @@ export function generateDocumentation(
   for (var key in classesHash) {
     setAllParentTypes(key);
   }
-  if(generateDocs) {
-    updateEventsDocumentation();
-    updateHiddenForEntriesDoc();
-    // print out the doc
-    fs.writeFileSync(
-      process.cwd() + "/docs/classes.json",
-      JSON.stringify(outputClasses, undefined, 4)
-    );
-    fs.writeFileSync(
-      process.cwd() + "/docs/pmes.json",
-      JSON.stringify(outputPMEs, undefined, 4)
-    );
-  }
+  updateEventsDocumentation();
+  updateHiddenForEntriesDoc();
+  // print out the doc
+  fs.writeFileSync(
+    process.cwd() + "/docs/classes.json",
+    JSON.stringify(outputClasses, undefined, 4)
+  );
+  fs.writeFileSync(
+    process.cwd() + "/docs/pmes.json",
+    JSON.stringify(outputPMEs, undefined, 4)
+  );
   if (generateJSONDefinition) {
     outputDefinition["$schema"] = "http://json-schema.org/draft-07/schema#";
     outputDefinition["title"] = "SurveyJS Library json schema";
@@ -223,17 +154,6 @@ export function generateDocumentation(
       process.cwd() + "/docs/surveyjs_definition.json",
       JSON.stringify(outputDefinition, undefined, 4)
     );
-  }
-  if(generateDts) {
-    prepareDtsInfo();
-    dtsImportFiles(docOptions.paths);
-    let text = "";
-    if(!!dtsProductName) {
-      dtsVersion = dtsGetVersion();
-      text += dtsGetBanner();
-    }
-    text += dtsGetText();
-    fs.writeFileSync(getAbsoluteFileName(dtsOutput), text);
   }
   deleteVueTSFiles();
   return;
@@ -269,14 +189,14 @@ export function generateDocumentation(
       if(endIndex > startIndex && startIndex > 0) {
         const vue_tsText = vueText.substring(startIndex, endIndex);
         absFileName += ".ts";
-        dtsVueGeneratedFiles.push(absFileName);
+        vueGeneratedFiles.push(absFileName);
         fs.writeFileSync(absFileName, vue_tsText);
       }
     }
   }
   function deleteVueTSFiles() {
-    for(var i = 0; i < dtsVueGeneratedFiles.length; i ++) {
-      fs.unlinkSync(dtsVueGeneratedFiles[i]);
+    for(var i = 0; i < vueGeneratedFiles.length; i ++) {
+      fs.unlinkSync(vueGeneratedFiles[i]);
     }
   }
   function isNonEnglishLocalizationFile(fileName: string): boolean {
@@ -285,30 +205,6 @@ export function generateDocumentation(
     if(name === "english") return false;
     const loc = "localization";
     return dir.lastIndexOf(loc) > dir.length - loc.length - 3;
-  }
-  function dtsGetVersion(): string {
-    const fileName = getAbsoluteFileName("package.json");
-    if(!fs.existsSync(fileName)) return "";
-    const text = fs.readFileSync(fileName, 'utf8');
-    if(!text) return "";
-    const matches = text.match(/(?<="version":)(.*)(?=,)/gm);
-    if(!Array.isArray(matches) || matches.length === 0) return "";
-    let res = matches[0];
-    if(!res) return "";
-    return res.trim().replace("\"", "").replace("\"", "");
-  }
-  function dtsGetBanner(): string {
-    const lines = [];
-    lines.push("/*");
-    const paddging = "* ";
-    lines.push(paddging + dtsProductName + (dtsVersion ? " v" + dtsVersion : ""));
-    lines.push(paddging + "Copyright (c) 2015-" + new Date().getFullYear() + " Devsoft Baltic OÜ  - https://surveyjs.io/");
-    if(dtsLicense) {
-      lines.push(paddging + "License: " + dtsLicense);
-    }
-    lines.push("*/");
-    lines.push("");
-    return lines.join("\n");
   }
 /** set allParentTypes */
   function setAllParentTypes(className: string) {
@@ -341,26 +237,14 @@ export function generateDocumentation(
   function visit(node: ts.Node) {
     // Only consider exported nodes
     if (!isNodeExported(node)) return;
-    if (node.kind === ts.SyntaxKind.EnumDeclaration) {
-      const enNode = <ts.EnumDeclaration>node;
-      let symbol = checker.getSymbolAtLocation(enNode.name);
-      if (!!symbol && generateDts) {
-        visitEnumNode(enNode, symbol);
-      }
-    } else if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
-      const fnNode = <ts.FunctionDeclaration>node;
-      let symbol = checker.getSymbolAtLocation(fnNode.name);
-      if (!!symbol && generateDts) {
-        visitFunctionNode(fnNode, symbol);
-      }
-    } else if (node.kind === ts.SyntaxKind.VariableStatement) {
+    if (node.kind === ts.SyntaxKind.VariableStatement) {
       const vsNode = <ts.VariableStatement>node;
       if(vsNode.declarationList.declarations.length > 0) {
         const varNode = vsNode.declarationList.declarations[0];
         let symbol = checker.getSymbolAtLocation(
           (<ts.VariableDeclaration>varNode).name
         );
-        if (!!symbol && (generateDts || isSymbolHasComments(symbol))) {
+        if (!!symbol && isSymbolHasComments(symbol)) {
           visitVariableNode(varNode, symbol);
         }
       }
@@ -370,21 +254,19 @@ export function generateDocumentation(
         (<ts.ClassDeclaration>node).name
       );
       if(!symbol) return;
-      if (generateDts || isSymbolHasComments(symbol)) {
+      if (isSymbolHasComments(symbol)) {
         visitDocumentedNode(node, symbol);
       }
     } else if (node.kind === ts.SyntaxKind.InterfaceDeclaration) {
       // This is a top level class, get its symbol
       const name = (<ts.InterfaceDeclaration>node).name;
       let symbol = checker.getSymbolAtLocation(name);
-      if (generateDts || isSymbolHasComments(symbol) || isOptionsInterface(name.text)) {
+      if (isSymbolHasComments(symbol) || isOptionsInterface(name.text)) {
         visitDocumentedNode(node, symbol);
       }
     } else if (node.kind === ts.SyntaxKind.ModuleDeclaration) {
       // This is a namespace, visit its children
       ts.forEachChild(node, visit);
-    } else if(node.kind === ts.SyntaxKind.ExportDeclaration) {
-      visitExportDeclarationNode(<ts.ExportDeclaration>node);
     } else if(node.kind === ts.SyntaxKind.TypeAliasDeclaration) {
       visitExportTypeAliasNode(<ts.TypeAliasDeclaration>node);
     }
@@ -404,76 +286,14 @@ export function generateDocumentation(
       }
     }
   }
-  function visitExportDeclarationNode(node: ts.ExportDeclaration) {
-    if(!node.exportClause) return;
-    if(isExportFromDtsFile(node)) return;
-    const els = (<any>node.exportClause).elements;
-    if(!Array.isArray(els)) return;
-    const exportLibrary = getExportLibraryName(node);
-    for(var i = 0; i < els.length; i ++) {
-      const el = els[i];
-      if(!el.name || !el.propertyName && !exportLibrary) continue;
-      const name = el.name.text;
-      if(!name) continue;
-      if(!exportLibrary && dtsImportDeclarations[name]) continue;
-      const entry: DocEntry = { name: name };
-      if(!!el.propertyName) {
-        entry.className = el.propertyName.text
-      } 
-      if(!!exportLibrary) {
-        entry.fileName = exportLibrary;
-      }
-      dtsExportClassesFromLibraries.push(entry);
-    }
-  }
-  function isExportFromDtsFile(node: ts.ExportDeclaration): boolean {
-    if(!node.parent) return false;
-    const file = node.parent.getSourceFile();
-    if(!file) return false;
-    return file.fileName.indexOf(".d.ts") > -1;
-  }
-  function getExportLibraryName(node: ts.ExportDeclaration): string {
-    const name = !!node.moduleSpecifier ? (<any>node.moduleSpecifier).text : undefined;
-    if(!name) return undefined;
-    return dtsExportNames.indexOf(name) > -1 ? name : undefined;
-  }
   function visitVariableNode(node: ts.VariableDeclaration, symbol: ts.Symbol) {
     const entry = serializeSymbol(symbol);
     entry.entryType = DocEntryType.variableType;
-    dtsDeclarations[entry.name] = entry;
     visitVariableProperties(entry, node);
-    if(generateDocs) {
-      entry.allTypes = [entry.name];
-      entry.isPublic = true;
-      outputClasses.push(entry);
-      entry.members = [];
-    }
-  }
-  function visitEnumNode(node: ts.EnumDeclaration, symbol: ts.Symbol) {
-    let modifier = ts.getCombinedModifierFlags(node);
-    if ((modifier & ts.ModifierFlags.Export) === 0) return;
-    const entry = {
-      name: symbol.name,
-      entryType: DocEntryType.enumType,
-      members: []
-    };
-    dtsDeclarations[entry.name] = entry;
-    for(var i = 0; i < node.members.length; i ++) {
-      const member = node.members[i];
-      const sym = checker.getSymbolAtLocation(member.name);
-      if(!!sym && !!sym.name) {
-        const id = !!member.initializer ? (<any>member.initializer).text : undefined;
-        entry.members.push({ name: sym.name, returnType: id});
-      }
-    }
-  }
-  function visitFunctionNode(node: ts.FunctionDeclaration, symbol: ts.Symbol) {
-    let modifier = ts.getCombinedModifierFlags(node);
-    if ((modifier & ts.ModifierFlags.Export) === 0) return;
-    const entry = serializeMethod(symbol, node);
-    if(!entry) return;
-    entry.entryType = DocEntryType.functionType;
-    dtsDeclarations[entry.name] = entry;
+    entry.allTypes = [entry.name];
+    entry.isPublic = true;
+    outputClasses.push(entry);
+    entry.members = [];
   }
   function visitVariableProperties(entry: DocEntry, node: ts.VariableDeclaration) {
     if(!node.initializer) return;
@@ -491,15 +311,13 @@ export function generateDocumentation(
     if(memberEntry) {
       if(!entry.members) entry.members = [];
       entry.members.push(memberEntry);
-      if(generateDocs) {
-          if(entry.entryType === DocEntryType.variableType) {
-              outputPMEs.push(memberEntry);
-              memberEntry.className = entry.name;
-              memberEntry.pmeType = "property";
-              memberEntry.isPublic = true;
-              memberEntry.isField = true,
-              memberEntry.hasSet = true;
-          }
+      if(entry.entryType === DocEntryType.variableType) {
+          outputPMEs.push(memberEntry);
+          memberEntry.className = entry.name;
+          memberEntry.pmeType = "property";
+          memberEntry.isPublic = true;
+          memberEntry.isField = true,
+          memberEntry.hasSet = true;
       }
       visitVariableProperties(memberEntry, <ts.VariableDeclaration>node);
     }
@@ -516,7 +334,7 @@ export function generateDocumentation(
     if(isOptions) return;
     if (!curJsonName) return;
     curClass.jsonName = curJsonName;
-    if (!jsonObjMetaData || !generateDocs) return;
+    if (!jsonObjMetaData) return;
     const properties = jsonObjMetaData.getProperties(curJsonName);
     const classInfo = jsonObjMetaData.findClass(curJsonName);
     const hiddenProps = {};
@@ -775,7 +593,6 @@ export function generateDocumentation(
   function serializeClass(symbol: ts.Symbol, node: ts.Node) {
     let details = serializeSymbol(symbol);
     details.implements = getImplementedTypes(node, details.name);
-    setTypeParameters(details.name, node);
     if(node.kind === ts.SyntaxKind.InterfaceDeclaration) {
       details.entryType = DocEntryType.interfaceType;
     }
@@ -790,7 +607,6 @@ export function generateDocumentation(
     createPropertiesFromConstructors(details);
     const firstHeritageClauseType = getFirstHeritageClauseType(<ts.ClassDeclaration>node);
     details.baseType = getBaseType(firstHeritageClauseType);
-    setTypeParameters(details.baseType, firstHeritageClauseType, details.name);
     return details;
   }
   function getConstructors(constructorType: ts.Type): DocEntry[] {
@@ -843,7 +659,6 @@ export function generateDocumentation(
       const name = getBaseType(clause.types[i]);
       if(!!name) {
         res.push(name);
-        setTypeParameters(name, clause.types[i], className);
       }
     }
   }
@@ -874,21 +689,6 @@ export function generateDocumentation(
     if(!!expression.expression && !!expression.expression.text && !!expression.name && !!expression.name.text)
       return expression.expression.text + "." + expression.name.text;
     return "";
-  }
-  function setTypeParameters(typeName: string, node: ts.Node, forTypeName?: string) {
-    if(!typeName || !node) return;
-    const parameters = getTypedParameters(node, !!forTypeName);
-    if(!parameters) return;
-    if(!forTypeName) {
-      dtsTypesParameters[typeName] = parameters;
-    } else {
-      let args = dtsTypesArgumentParameters[typeName];
-      if(!args) {
-        args = {};
-        dtsTypesArgumentParameters[typeName] = args;
-      }
-      args[forTypeName] = parameters;
-    }
   }
   function getTypedParameters(node: ts.Node, isArgument: boolean): string[] {
     const params = getTypeParametersDeclaration(node, isArgument);
@@ -1032,8 +832,6 @@ export function generateDocumentation(
   function isPMENodeExported(node: ts.Node, symbol: ts.Symbol): boolean {
     let modifier = ts.getCombinedModifierFlags(<ts.Declaration>node);
     if ((modifier & ts.ModifierFlags.Public) !== 0) return true;
-    if(generateDts && modifier === 0) return true;
-    if(generateDts && (modifier & ts.ModifierFlags.Protected) !== 0) return true;
     if(node.kind === ts.SyntaxKind.PropertyDeclaration) return true;
     if(isSymbolHasComments(symbol)) return true;
     /*
@@ -1292,413 +1090,5 @@ export function generateDocumentation(
     var curClass = classesHash[type];
     if (!curClass) return type;
     return { $href: "#" + curClass.jsonName };
-  }
-  function dtsImportFiles(imports: any) {
-    if(!imports) return;
-    for(var key in imports) {
-      const arr = imports[key];
-      if(!Array.isArray(arr)) continue;
-      for(var i = 0; i < arr.length; i ++) {
-        importDtsFile(key, arr[i]);
-      }
-    }
-  }
-  function importDtsFile(moduleName: string, fileName: string) {
-    let text: string = fs.readFileSync(getAbsoluteFileName(fileName), 'utf8');
-    const regExStrs = [{regex: /(?<=export interface)(.*)(?={)/gm, type: DocEntryType.interfaceType}, 
-      {regex: /(?<=export declare var)(.*)(?=:)/gm, type: DocEntryType.variableType}, 
-      {regex: /(?<=export declare function)(.*)(?=\()/gm, type: DocEntryType.functionType},
-      {regex: /(?<=export declare class)(.*)(?={)/gm, type: DocEntryType.classType}, 
-      {regex: /(?<=export declare class)(.*)(?=extends)/gm, type: DocEntryType.classType},
-      {regex: /(?<=export declare class)(.*)(?=implements)/gm, type: DocEntryType.classType},
-      {regex: /(?<=export declare class)(.*)(?=<)/gm, type: DocEntryType.classType}];
-    const removedWords = [" extends ", "<"]
-    for(var i = 0; i < regExStrs.length; i ++) {
-      const item = regExStrs[i];
-      const mathArray = text.match(item.regex);
-      if(!Array.isArray(mathArray)) continue;
-      mathArray.forEach((name: string) => {
-        if(!!name && !!name.trim()) {
-          for(var rI = 0; rI < removedWords.length; rI ++) {
-            const index = name.indexOf(removedWords[rI]);
-            if(index > -1) {
-              name = name.substring(0, index);
-            }
-          }
-          dtsImports[name.trim()] = {name: name.trim(), moduleName: moduleName, entryType: item.type};
-        }
-      });
-    }
-  }
-  function prepareDtsInfo() {
-    for(var key in classesHash) {
-      proccessDtsClass(classesHash[key]);
-    }
-  }
-  function proccessDtsClass(curClass: DocEntry) {
-    dtsDeclarations[curClass.name] = curClass;
-  }
-  function dtsGetText(): string {
-    const lines = [];
-    dtsRenderDeclarations(lines);
-    return lines.join("\n");
-  }
-  function dtsRenderDeclarations(lines: string[]) {
-    const classes = [];
-    const interfaces = [];
-    const functions = [];
-    const variables = [];
-    const enums = [];
-
-    for(var key in dtsDeclarations) {
-      if(dtsExcludeImports && !!dtsImports[key]) continue;
-      const cur = dtsDeclarations[key];
-      if (cur.entryType === DocEntryType.classType) {
-          classes.push(cur);
-      }
-      if (cur.entryType === DocEntryType.interfaceType) {
-          interfaces.push(cur);
-      }
-      if (cur.entryType === DocEntryType.variableType) {
-        variables.push(cur);
-      } 
-      if (cur.entryType === DocEntryType.functionType) {
-        functions.push(cur);
-      } 
-      if (cur.entryType === DocEntryType.enumType) {
-        enums.push(cur);
-      } 
-    }
-    for(var i = 0; i < dtsExportClassesFromLibraries.length; i ++) {
-      dtsRenderExportClassFromLibraries(lines, dtsExportClassesFromLibraries[i]);
-    }
-    if(dtsExportClassesFromLibraries.length > 0) {
-      lines.push("");
-    }
-    dtsSortClasses(classes);
-    for (var i = 0; i < enums.length; i++) {
-      dtsRenderDeclarationEnum(lines, enums[i]);
-    }
-    for (var i = 0; i < interfaces.length; i++) {
-      dtsRenderDeclarationInterface(lines, interfaces[i]);
-    }
-    for(var i = 0; i < classes.length; i ++) {
-      dtsRenderDeclarationClass(lines, classes[i]);
-    }
-    for(var i = 0; i < functions.length; i ++) {
-      dtsRenderDeclarationFunction(lines, functions[i]);
-    }
-    for(var i = 0; i < variables.length; i ++) {
-      dtsRenderDeclarationVariable(lines, variables[i], 0);
-    }
-    dtsRenderImports(lines);
-  }
-  function dtsSortClasses(classes: DocEntry[]) {
-    classes.sort((a: DocEntry, b: DocEntry) : number => {
-      if(a.allTypes.indexOf(b.name) > -1) return 1;
-      if(b.allTypes.indexOf(a.name) > -1) return -1;
-      if(a.allTypes.length !== b.allTypes.length) {
-        return a.allTypes.length > b.allTypes.length ? 1 : -1;
-      }
-      return  a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-    });
-  }
-  function dtsRenderImports(lines: string[]) {
-    const modules: any = {};
-    for(key in dtsImportDeclarations) {
-      const entry: DocEntry = dtsImportDeclarations[key];
-      let arr = modules[entry.moduleName];
-      if(!arr) {
-        arr = [];
-        modules[entry.moduleName] = arr;
-      }
-      arr.push(key);
-    }
-    const importLines: string[] =[];
-    for(key in modules) {
-      const arr: string[] = modules[key];
-      while(arr.length > 0) {
-        const renderedArr = arr.splice(0, 5);
-        let str = "import { " + renderedArr.join(", ") + " } from \"" + key + "\";";
-        importLines.push(str);
-      }
-    }
-    for(var key in dtsFrameworksImportDeclarations) {
-      importLines.push(dtsFrameworksImportDeclarations[key] + " from \"" + key + "\";");
-    }
-    if(importLines.length > 0) {
-      lines.unshift("");
-    }
-    for(let i = importLines.length - 1; i >= 0; i --) {
-      lines.unshift(importLines[i]);
-    }
-  }
-  function dtsRenderExportClassFromLibraries(lines: string[], entry: DocEntry) {
-    if(!!dtsExportedClasses[entry.name]) return;
-    dtsExportedClasses[entry.name] = true;
-    let str = "export { "
-    if(!!entry.className) {
-      str += entry.className + " as ";
-    }
-    str += entry.name + " }";
-    if(!!entry.fileName) {
-      str += " from \"" + entry.fileName + "\"";
-    }
-    str += ";";
-    lines.push(str);
-  }
-  function dtsRenderDeclarationClass(lines: string[], entry: DocEntry) {
-    if(entry.name === "default") return;
-    dtsRenderDoc(lines, entry);
-    let line = "export declare ";
-    line += "class " + entry.name + dtsGetTypeGeneric(entry.name) + dtsRenderClassExtend(entry) + " {";
-    lines.push(line);
-    dtsRenderDeclarationConstructor(lines, entry);
-    dtsRenderDeclarationBody(lines, entry);
-    lines.push("}");
-  }
-  function dtsRenderDeclarationInterface(lines: string[], entry: DocEntry) {
-    dtsRenderDoc(lines, entry);
-    const impl = dtsRenderImplementedInterfaces(entry, false);
-    var line = "export interface " + dtsGetType(entry.name) + dtsGetTypeGeneric(entry.name) + impl +  " {";
-    lines.push(line);
-    dtsRenderDeclarationBody(lines, entry);
-    lines.push("}");
-  }
-  function dtsRenderDeclarationVariable(lines: string[], entry: DocEntry, level: number) {
-    dtsRenderDoc(lines, entry, level);
-    var line = (level === 0 ? "export declare var " : dtsAddSpaces(level)) + entry.name + ": ";
-    const hasMembers = Array.isArray(entry.members);
-    const comma = level === 0 ? ";" : ",";
-    line += hasMembers ? "{" : (dtsGetType(entry.type) + comma);
-    lines.push(line);
-    if(hasMembers) {
-        for(var i = 0; i < entry.members.length; i ++) {
-          if(dtsIsPrevMemberTheSame(entry.members, i)) continue;
-          dtsRenderDeclarationVariable(lines, entry.members[i], level + 1);
-        }
-        lines.push(dtsAddSpaces(level) + "}" + comma);
-    }
-  }
-  function dtsRenderDeclarationEnum(lines: string[], entry: DocEntry) {
-    if(!Array.isArray(entry.members) || entry.members.length === 0) return;
-    lines.push("export enum " + entry.name + " {");
-    for(var i = 0; i < entry.members.length; i ++) {
-      const m = entry.members[i];
-      const comma = i < entry.members.length - 1 ? "," : "";
-      lines.push(dtsAddSpaces() + m.name + (!!m.returnType ? " = " + m.returnType : "") + comma);
-    }
-    lines.push("}")
-  }
-  function dtsRenderDeclarationFunction(lines: string[], entry: DocEntry) {
-    lines.push("export declare function " + dtsGetFunctionDeclaration(entry));
-  }
-  function dtsRenderClassExtend(cur: DocEntry): string {
-    if(!cur.baseType) return "";
-    if(!dtsGetHasClassType(cur.baseType)) return "";
-    let entry: DocEntry = dtsDeclarations[cur.baseType];
-    if(!entry) {
-      entry = dtsImports[cur.baseType];
-    }
-    const isInteface = !!entry && entry.entryType === DocEntryType.interfaceType;
-    const impl = dtsRenderImplementedInterfaces(cur, !isInteface);
-    if(isInteface)
-      return impl;
-    const generic = dtsGetTypeGeneric(cur.baseType, cur.name);
-    return  " extends " + cur.baseType + generic + impl;
-  }
-  function dtsRenderImplementedInterfaces(entry: DocEntry, isBaseClass: boolean): string {
-    if(!Array.isArray(entry.implements)) return "";
-    const impls = entry.implements;
-    if(impls.length === 0) return "";
-    const res = [];
-    for(var i = 0; i < impls.length; i ++) {
-      if(isBaseClass && impls[i] === entry.baseType) continue;
-      const generic = dtsGetTypeGeneric(impls[i], entry.name);
-      dtsAddImportDeclaration(impls[i]);
-      res.push(impls[i] + generic);
-    }
-    if(res.length === 0) return "";
-    const ext = entry.entryType === DocEntryType.interfaceType ?  " extends " : " implements ";
-    return ext + res.join(", ");
-  }
-  function dtsRenderDeclarationBody(lines: string[], entry: DocEntry) {
-    if(!Array.isArray(entry.members)) return;
-    const members = [].concat(entry.members);
-    for(var i = 0; i < members.length; i ++) {
-      if(dtsIsPrevMemberTheSame(members, i)) continue;
-      const member: DocEntry = members[i];
-      dtsRenderDeclarationMember(lines, member);
-      if(member.isLocalizable) {
-        const name = "loc" + member.name[0].toUpperCase() + member.name.substring(1);
-        if(dtsHasMemberInEntry(entry, name)) continue;
-        const locMember = {name: name, type: "LocalizableString", hasSet: false, pmeType: "property"};
-        dtsRenderDeclarationMember(lines, locMember);
-      }
-    }
-  }
-  function dtsHasMemberInEntry(entry: DocEntry, name: string): boolean {
-    if(!Array.isArray(entry.members)) return;
-    for(var i = 0; i < entry.members.length; i ++) {
-      if(entry.members[i].name === name) return true;
-    }
-    return false;
-  }
-  function dtsRenderDeclarationConstructor(lines: string[], entry: DocEntry) {
-    if(!Array.isArray(entry.constructors)) return;
-    for(var i = 0; i < entry.constructors.length; i ++) {
-      const parameters = dtsGetParameters(entry.constructors[i]);
-      lines.push(dtsAddSpaces() + "constructor(" + parameters + ");");
-    }
-  }
-  function dtsRenderDeclarationMember(lines: string[], member: DocEntry) {
-    const prefix = dtsAddSpaces() + (member.isProtected ? "protected " : "") + (member.isStatic ? "static " : "");
-    dtsRenderDoc(lines, member, 1);
-    let importType = "";
-    if(member.pmeType === "function" || member.pmeType === "method") {
-      importType = member.returnType;
-      lines.push(prefix + dtsGetFunctionDeclaration(member));
-    }
-    if(member.pmeType === "property") {
-      const propType = dtsGetType(member.type);
-      importType = member.type;
-      if(member.isField) {
-        lines.push(prefix + member.name + (member.isOptional ? "?" : "") + ": " + propType + ";");  
-      } else {
-        lines.push(prefix + "get " + member.name + "(): " + propType + ";");
-        if(member.hasSet) {
-          lines.push(prefix + "set " + member.name + "(val: " + propType + ");");
-        }
-      }
-    }
-    if(member.pmeType === "event") {
-      importType = member.type;
-      lines.push(prefix + member.name + ": " + member.type + ";");
-    }
-    dtsAddImportDeclaration(removeGenerics(importType));
-  }
-  function dtsGetFunctionDeclaration(entry: DocEntry) : string {
-    const parStr = dtsGetFunctionParametersDeclaration(entry);
-    return entry.name + dtsGetGenericTypes(entry.typeGenerics) + parStr + ";";
-  }
-  function dtsGetFunctionParametersDeclaration(entry: DocEntry, isParameter: boolean = false): string {
-    let returnType = removeGenerics(entry.returnType);
-    returnType = dtsGetType(returnType);
-    if(returnType !== "any") {
-      returnType += dtsGetGenericTypes(entry.returnTypeGenerics);
-    }
-    const parameters = dtsGetParameters(entry);
-    return "(" + parameters + ")" + (isParameter ? " => " : ": ")  + returnType;
-  }
-  function removeGenerics(typeName: string): string {
-    if(!typeName) return typeName;
-    if(typeName[typeName.length - 1] !== ">") return typeName;
-    const index = typeName.indexOf("<");
-    if(index < 0) return typeName;
-    return typeName.substring(0, index);
-  }
-  function dtsGetGenericTypes(generic: string[]): string {
-    if(!Array.isArray(generic) || generic.length === 0) return "";
-    return "<" + generic.join(", ") + ">";
-  }
-  function dtsRenderDoc(lines: string[], entry: DocEntry, level: number = 0) {
-    if(!entry.documentation) return;
-    const docLines = entry.documentation.split("\n");
-    lines.push(dtsAddSpaces(level) + "/*");
-    for(var i = 0; i < docLines.length; i ++) {
-      lines.push(dtsAddSpaces(level) + "* " + docLines[i]);
-    }
-    lines.push(dtsAddSpaces(level) + "*/");
-  }
-  function dtsGetType(type: string): string {
-    if(!type) return "void";
-    if(type === "T") return type;
-    if(type.indexOf("|") > -1) {
-      return type.indexOf("(") > -1 ? "any" : type;
-    }
-    let str = type.replace("[", "").replace("]", "");
-    if(str === "number" || str === "boolean" || str === "string" || str === "any" || str === "void") return type;
-    if(type[0] === "(" && type.indexOf(callbackFuncResultStr) > -1) return dtsGetTypeAsFunc(type);
-    return dtsPlatformType(str, type);
-  }
-  function dtsPlatformType(str: string, type: string): string {
-    if(!dtsGetHasClassType(str)) return "any";
-    if(isReactElement(type)) return "JSX.Element";
-    return type;
-  }
-  function dtsGetTypeAsFunc(type: string): string {
-    const index = type.indexOf(callbackFuncResultStr);
-    const entry: DocEntry = {};
-    entry.returnType = type.substring(index + callbackFuncResultStr.length);
-    const paramsStr = type.substring(1, index).split(",");
-    entry.parameters = [];
-    for(var i = 0; i < paramsStr.length; i ++) {
-      const par = paramsStr[i];
-      const parIndex = par.indexOf(":");
-      if(parIndex < 0)  return "any";
-      entry.parameters.push({name: par.substring(0, parIndex).trim(), type: par.substring(parIndex + 1).trim() });
-    } 
-    return dtsGetFunctionParametersDeclaration(entry, true)
-  }
-  function dtsGetTypeGeneric(type: string, typeFor?: string): string {
-    if(!type) return "";
-    if(!typeFor) return dtsGetTypeGenericByParameters(dtsTypesParameters[type]);
-    const args = dtsTypesArgumentParameters[type];
-    if(!args) return "";
-    return dtsGetTypeGenericByParameters(args[typeFor]);
-  }
-  function dtsGetTypeGenericByParameters(params: string[]): string {
-    if(!Array.isArray(params)) return "";
-    for(var i = 0; i < params.length; i ++) {
-      dtsAddImportDeclaration(params[i]);
-    }
-    return "<" + params.join(", ") + ">";
-  }
-  function isReactElement(type: string): boolean {
-    return isExportingReact && type === "Element";
-  }
-  function dtsGetHasClassType(type: string): boolean {
-    if(dtsAddImportDeclaration(type)) return true;
-    if(type === "Array") return true;
-    if(isReactElement(type)) return true;
-    return !!dtsDeclarations[type];
-  }
-  function dtsAddImportDeclaration(type: string): boolean {
-    if(!type) return false;
-    if(type.indexOf("React.") === 0) {
-      dtsFrameworksImportDeclarations["react"] = "import * as React";
-      isExportingReact = true;
-      return true;
-    }
-    if(type === "Vue") {
-      dtsFrameworksImportDeclarations["vue"] = "import Vue";
-      return true;
-    }
-    if(!dtsExcludeImports && !!dtsDeclarations[type]) return false;
-    const entry = dtsImports[type];
-    if(!entry) return false;
-    dtsImportDeclarations[type] = entry;
-    return true;
-  }
-  function dtsIsPrevMemberTheSame(members: Array<DocEntry>, index: number): boolean {
-    return index > 0 && members[index].name === members[index - 1].name;
-  }
-  function dtsGetParameters(member: DocEntry): string {
-    if(!Array.isArray(member.parameters)) return "";
-    let strs  = [];
-    const params = member.parameters;
-    for(var i = 0; i < params.length; i ++) {
-      const p = params[i];
-      let typeStr = dtsGetType(p.type);
-      //We have Event in library core and there is Event in DOM.
-      if(typeStr === "Event") typeStr = "any";
-      strs.push(p.name + (p.isOptional ? "?" : "") + ": " + typeStr);
-    }
-    return strs.join(", ");
-  }
-  function dtsAddSpaces(level: number = 1): string {
-    let str = "";
-    for(var i = 0; i < level; i++) str+= "  ";
-    return str;
   }
 }
