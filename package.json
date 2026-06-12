@@ -11,12 +11,13 @@
     "typescript": "4.2.4"
   },
   "devDependencies": {
-    "@types/node": "^14.18.63",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.1",
     "vitest": "^4.1.8"
   },
   "scripts": {
     "clean": "node -e \"const fs=require('fs');fs.readdirSync('src').filter(f=>f.endsWith('.js')||f.endsWith('.js.map')).forEach(f=>fs.unlinkSync('src/'+f))\"",
-    "build": "npm run clean && tsc index.ts",
+    "build": "npm run clean && esbuild index.ts --bundle --platform=node --external:typescript --outfile=index.js",
     "test": "vitest run",
     "test:watch": "vitest"
   }
