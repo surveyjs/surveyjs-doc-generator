@@ -1115,7 +1115,7 @@ function isVisibleMember(member) {
 }
 function frontMatter(cls, product, isInterface, sourceBaseUrl) {
   const title = cls.metaTitle || cls.name || "";
-  const description = oneLine(cls.metaDescription || cls.documentation);
+  const description = firstSentence(stripMarkdownLinks(cls.metaDescription || cls.documentation));
   const source = sourceUrl(product, cls.name, sourceBaseUrl);
   const lines = [
     "---",

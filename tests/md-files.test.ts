@@ -45,6 +45,20 @@ describe("generateMDFiles", () => {
       expect(md).toContain("source: https://surveyjs.io/form-library/documentation/api-reference/simplemodel");
     });
 
+    test("front matter description is only the first sentence, without links", () => {
+      const classes = [{
+        name: "EmailValidator", entryType: 1,
+        documentation: "A class that implements a validator for e-mail addresses. [View Demo](https://surveyjs.io/form-library/examples/javascript-form-validation/ (linkStyle))"
+      }];
+      const out = runMDGenerator(classes as any, [])["EmailValidator.md"];
+      // Inspect only the front-matter block; the body keeps the full documentation.
+      const frontMatter = out.split("---")[1];
+      expect(frontMatter).toContain("description: A class that implements a validator for e-mail addresses.");
+      expect(frontMatter).not.toContain("View Demo");
+      expect(frontMatter).not.toContain("](");
+      expect(frontMatter).not.toContain("https://surveyjs.io/form-library/examples");
+    });
+
     test("heading and class description are rendered", () => {
       expect(md).toContain("# `SimpleModel`");
       expect(md).toContain("A simple model class.");
