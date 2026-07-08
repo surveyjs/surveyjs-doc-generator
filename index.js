@@ -1141,9 +1141,9 @@ function inheritanceSection(cls) {
 function propertiesSection(properties) {
   const blocks = properties.map((prop) => {
     const lines = ["### `" + prop.name + "`"];
+    lines.push("**Type**: `" + typeString(prop.type, prop.returnTypeGenerics) + "`");
     const doc = (prop.documentation || "").trim();
     if (doc) lines.push(doc);
-    lines.push("**Type**: `" + typeString(prop.type, prop.returnTypeGenerics) + "`");
     return lines.join("\n\n");
   });
   return "## Properties\n\n" + blocks.join("\n\n");
@@ -1151,10 +1151,10 @@ function propertiesSection(properties) {
 function methodsSection(methods) {
   const blocks = methods.map((method) => {
     const lines = ["### `" + method.name + "()`"];
-    const doc = (method.documentation || "").trim();
-    if (doc) lines.push(doc);
     const returnValue = returnValueLine(method);
     if (returnValue) lines.push(returnValue);
+    const doc = (method.documentation || "").trim();
+    if (doc) lines.push(doc);
     const table = parametersTable(method.parameters);
     if (table) lines.push("**Parameters:**\n\n" + table);
     return lines.join("\n\n");

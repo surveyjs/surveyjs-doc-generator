@@ -71,6 +71,14 @@ describe("generateMDFiles", () => {
       expect(md).toContain("**Type**: `string`");
     });
 
+    test("property block order is name, then type, then description", () => {
+      const heading = md.indexOf("### `title`");
+      const type = md.indexOf("**Type**: `string`");
+      const desc = md.indexOf("The model title.");
+      expect(heading).toBeLessThan(type);
+      expect(type).toBeLessThan(desc);
+    });
+
     test("methods are listed with return value and a parameters table", () => {
       expect(md).toContain("## Methods");
       expect(md).toContain("### `greet()`");
@@ -78,6 +86,16 @@ describe("generateMDFiles", () => {
       expect(md).toContain("**Return value:** `string` &ndash; The greeting text.");
       expect(md).toContain("**Parameters:**");
       expect(md).toContain("| `name` | `string` | A person name. |");
+    });
+
+    test("method block order is name, then type (return value), then description", () => {
+      const heading = md.indexOf("### `greet()`");
+      const returnValue = md.indexOf("**Return value:** `string`");
+      const desc = md.indexOf("Returns a greeting for the specified name.");
+      const params = md.indexOf("**Parameters:**");
+      expect(heading).toBeLessThan(returnValue);
+      expect(returnValue).toBeLessThan(desc);
+      expect(desc).toBeLessThan(params);
     });
 
     test("members within a section are listed in alphabetical order", () => {
