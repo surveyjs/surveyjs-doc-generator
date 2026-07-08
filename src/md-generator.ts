@@ -82,16 +82,21 @@ export function generateMDFiles(
     const content = generateMDForClass(cls, members, product, options.sourceBaseUrl);
     fs.writeFileSync(path.join(outputDir, cls.name + ".md"), content);
   }
-  fs.writeFileSync(path.join(outputDir, "index.md"), generateIndexMD(classes, members));
+  fs.writeFileSync(
+    path.join(outputDir, "index.md"),
+    generateIndexMD(classes, members, product, options.sourceBaseUrl)
+  );
 }
 
 /**
- * Builds the content of `index.md`: a plain list of documented classes
- * (interfaces excluded), each shown as the class name plus the first sentence
- * of its description. Classes are ordered by the number of API members they
- * expose, most members first (e.g. `SurveyModel` leads the list).
+ * Builds the content of `index.md`: a list of documented classes (interfaces
+ * excluded), each shown as a link to the class API-reference page plus the
+ * first sentence of its description. Classes are ordered by the number of API
+ * members they expose, most members first (e.g. `SurveyModel` leads the list).
  */
-export function generateIndexMD(classes: DocEntry[], pmes: DocEntry[]): string {
+export function generateIndexMD(
+  classes: DocEntry[], pmes: DocEntry[], product: string = "Form Library", sourceBaseUrl?: string
+): string {
   const members = Array.isArray(pmes) ? pmes : [];
   const entries = (Array.isArray(classes) ? classes : [])
     .filter((cls) => !!cls && cls.entryType === DocEntryType.classType
@@ -105,7 +110,8 @@ export function generateIndexMD(classes: DocEntry[], pmes: DocEntry[]): string {
   const lines = ["---", "title: Classes", "---", "", "# Classes", ""];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    lines.push("- `" + entry.name + "`" + (entry.sentence ? " — " + entry.sentence : ""));
+    const link = "[`" + entry.name + "`](" + sourceUrl(product, entry.name, sourceBaseUrl) + ".md)";
+    lines.push("- " + link + (entry.sentence ? " — " + entry.sentence : ""));
   }
   return lines.join("\n") + "\n";
 }

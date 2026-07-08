@@ -218,26 +218,36 @@ describe("generateMDFiles", () => {
       expect(md).not.toContain("NoDescription");
     });
 
-    test("no links or file references are added", () => {
-      expect(md).not.toContain("](");
-      expect(md).not.toContain(".md");
+    test("each class name is a link to its api-reference page", () => {
+      expect(md).toContain(
+        "- [`SurveyModel`](https://surveyjs.io/form-library/documentation/api-reference/surveymodel.md) — The main survey model."
+      );
     });
 
-    test("inline markdown links in the description are stripped to plain text", () => {
+    test("the link uses the given product's library slug", () => {
+      const out = generateIndexMD(classes as any, pmes as any, "Survey Creator");
+      expect(out).toContain("(https://surveyjs.io/survey-creator/documentation/api-reference/surveymodel.md)");
+    });
+
+    test("the description sentence itself stays link-free", () => {
       const linked = [
         { name: "Linked", entryType: 1, documentation: "See the [`PanelModel`](https://example.com/panel) class for details." }
       ];
-      const out = generateIndexMD(linked as any, []);
-      expect(out).toContain("See the `PanelModel` class for details.");
-      expect(out).not.toContain("](");
-      expect(out).not.toContain("https://");
+      const line = generateIndexMD(linked as any, [])
+        .split("\n").find((l) => l.indexOf("Linked") > -1) || "";
+      const sentence = line.split(" — ")[1] || "";
+      expect(sentence).toBe("See the `PanelModel` class for details.");
+      expect(sentence).not.toContain("](");
+      expect(sentence).not.toContain("https://");
     });
 
     test("generateMDFiles writes an index.md alongside the class files", () => {
       const docs = runDocGenerator("smoke");
       const files = runMDGenerator(docs.classes, docs.pmes);
       expect(files["index.md"]).toBeDefined();
-      expect(files["index.md"]).toContain("`SimpleModel`");
+      expect(files["index.md"]).toContain(
+        "[`SimpleModel`](https://surveyjs.io/form-library/documentation/api-reference/simplemodel.md)"
+      );
       expect(files["index.md"]).toContain("A simple model class.");
     });
   });

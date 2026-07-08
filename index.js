@@ -1055,9 +1055,12 @@ function generateMDFiles(classes, pmes, options = {}) {
     const content = generateMDForClass(cls, members, product, options.sourceBaseUrl);
     fs3.writeFileSync(path3.join(outputDir, cls.name + ".md"), content);
   }
-  fs3.writeFileSync(path3.join(outputDir, "index.md"), generateIndexMD(classes, members));
+  fs3.writeFileSync(
+    path3.join(outputDir, "index.md"),
+    generateIndexMD(classes, members, product, options.sourceBaseUrl)
+  );
 }
-function generateIndexMD(classes, pmes) {
+function generateIndexMD(classes, pmes, product = "Form Library", sourceBaseUrl) {
   const members = Array.isArray(pmes) ? pmes : [];
   const entries = (Array.isArray(classes) ? classes : []).filter((cls) => !!cls && cls.entryType === 1 /* classType */ && !!cls.name && hasDescription(cls)).map((cls) => ({
     name: cls.name,
@@ -1067,7 +1070,8 @@ function generateIndexMD(classes, pmes) {
   const lines = ["---", "title: Classes", "---", "", "# Classes", ""];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    lines.push("- `" + entry.name + "`" + (entry.sentence ? " \u2014 " + entry.sentence : ""));
+    const link = "[`" + entry.name + "`](" + sourceUrl(product, entry.name, sourceBaseUrl) + ".md)";
+    lines.push("- " + link + (entry.sentence ? " \u2014 " + entry.sentence : ""));
   }
   return lines.join("\n") + "\n";
 }
