@@ -127,7 +127,9 @@ export function generateMDForClass(
   cls: DocEntry, pmes: DocEntry[], product: string, sourceBaseUrl?: string
 ): string {
   const isInterface = cls.entryType === DocEntryType.interfaceType;
-  const members = pmes.filter((p) => p.className === cls.name && isVisibleMember(p));
+  const members = pmes
+    .filter((p) => p.className === cls.name && isVisibleMember(p))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const properties = members.filter((p) => p.pmeType === "property");
   const methods = members.filter((p) => p.pmeType === "method");
   const events = members.filter((p) => p.pmeType === "event");

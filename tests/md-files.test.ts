@@ -62,6 +62,21 @@ describe("generateMDFiles", () => {
       expect(md).toContain("| `name` | `string` | A person name. |");
     });
 
+    test("members within a section are listed in alphabetical order", () => {
+      const classes = [{ name: "Sample", entryType: 1, documentation: "A sample class." }];
+      const pmes = [
+        { className: "Sample", name: "zebra", pmeType: "property", type: "string", documentation: "Z prop." },
+        { className: "Sample", name: "apple", pmeType: "property", type: "string", documentation: "A prop." },
+        { className: "Sample", name: "mango", pmeType: "property", type: "string", documentation: "M prop." },
+        { className: "Sample", name: "run", pmeType: "method", returnType: "void", documentation: "R method." },
+        { className: "Sample", name: "brake", pmeType: "method", returnType: "void", documentation: "B method." }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md.indexOf("`apple`")).toBeLessThan(md.indexOf("`mango`"));
+      expect(md.indexOf("`mango`")).toBeLessThan(md.indexOf("`zebra`"));
+      expect(md.indexOf("`brake()`")).toBeLessThan(md.indexOf("`run()`"));
+    });
+
     test("members without a description are not rendered", () => {
       const classes = [{ name: "Sample", entryType: 1, documentation: "A sample class." }];
       const pmes = [

@@ -1083,7 +1083,7 @@ function isClassOrInterface(cls) {
 }
 function generateMDForClass(cls, pmes, product, sourceBaseUrl) {
   const isInterface = cls.entryType === 2 /* interfaceType */;
-  const members = pmes.filter((p) => p.className === cls.name && isVisibleMember(p));
+  const members = pmes.filter((p) => p.className === cls.name && isVisibleMember(p)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const properties = members.filter((p) => p.pmeType === "property");
   const methods = members.filter((p) => p.pmeType === "method");
   const events = members.filter((p) => p.pmeType === "event");
