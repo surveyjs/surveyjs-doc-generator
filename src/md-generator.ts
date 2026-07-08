@@ -41,6 +41,24 @@ export function detectProduct(fileNames?: string[], cwd?: string): string {
   return "Form Library";
 }
 
+/** Product name &rarr; the library slug used in surveyjs.io documentation URLs. */
+const libraryNames: { [product: string]: string } = {
+  "Form Library": "form-library",
+  "Survey Creator": "survey-creator",
+  "Dashboard": "dashboard",
+  "PDF Generator": "pdf-generator"
+};
+
+/**
+ * Builds the `source` front-matter URL, e.g.
+ * `https://surveyjs.io/form-library/documentation/api-reference/surveymodel`.
+ */
+export function sourceUrl(product: string, className: string, baseUrl?: string): string {
+  const base = (baseUrl || "https://surveyjs.io").replace(/\/+$/, "");
+  const library = libraryNames[product] || libraryNames["Form Library"];
+  return base + "/" + library + "/documentation/api-reference/" + (className || "").toLowerCase();
+}
+
 /**
  * Generates one Markdown file per documented class/interface following the
  * API-reference template. Files are named `<ClassName>.md` / `<InterfaceName>.md`
@@ -156,7 +174,7 @@ function frontMatter(
 ): string {
   const title = cls.metaTitle || cls.name || "";
   const description = oneLine(cls.metaDescription || cls.documentation);
-  const source = sourceBaseUrl ? sourceBaseUrl + cls.name : "";
+  const source = sourceUrl(product, cls.name, sourceBaseUrl);
   const lines = [
     "---",
     "title: " + yamlScalar(title),
@@ -259,7 +277,12 @@ function tableCell(text: any): string {
 function yamlScalar(value: string): string {
   const text = oneLine(value);
   if (text === "") return "";
-  if (/[:#"'\[\]{}&*!|>%@`]/.test(text) || /^[-?]/.test(text)) {
+  const needsQuoting =
+    /:(\s|$)/.test(text)                    // colon that ends a token (a mapping key)
+    || /\s#/.test(text)                     // start of a comment
+    || /["\\]/.test(text)                   // quote or backslash
+    || /^[-?:,\[\]{}#&*!|>'"%@`]/.test(text); // leading YAML indicator
+  if (needsQuoting) {
     return "\"" + text.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
   }
   return text;

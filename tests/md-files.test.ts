@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll } from "vitest";
 import { runDocGenerator, runMDGenerator, runFullGenerator, DocsResult } from "./helper";
-import { detectProduct, generateIndexMD } from "../src/md-generator";
+import { detectProduct, generateIndexMD, sourceUrl } from "../src/md-generator";
 
 describe("generateMDFiles", () => {
   describe("class file (smoke fixture)", () => {
@@ -39,6 +39,10 @@ describe("generateMDFiles", () => {
       expect(md).toContain("title: SimpleModel");
       expect(md).toContain("product: Form Library");
       expect(md).toContain("api-type: class");
+    });
+
+    test("front matter carries the source URL, unquoted", () => {
+      expect(md).toContain("source: https://surveyjs.io/form-library/documentation/api-reference/simplemodel");
     });
 
     test("heading and class description are rendered", () => {
@@ -237,6 +241,36 @@ describe("generateMDFiles", () => {
       expect(files["classes.json"]).toBeDefined();
       expect(files["pmes.json"]).toBeDefined();
       expect(files["SimpleModel.md"]).toBeUndefined();
+    });
+  });
+
+  describe("source URL", () => {
+    test("maps each product to its library slug and lowercases the class name", () => {
+      expect(sourceUrl("Form Library", "SurveyModel"))
+        .toBe("https://surveyjs.io/form-library/documentation/api-reference/surveymodel");
+      expect(sourceUrl("Survey Creator", "SurveyCreatorModel"))
+        .toBe("https://surveyjs.io/survey-creator/documentation/api-reference/surveycreatormodel");
+      expect(sourceUrl("Dashboard", "VisualizationPanel"))
+        .toBe("https://surveyjs.io/dashboard/documentation/api-reference/visualizationpanel");
+      expect(sourceUrl("PDF Generator", "SurveyPDF"))
+        .toBe("https://surveyjs.io/pdf-generator/documentation/api-reference/surveypdf");
+    });
+
+    test("falls back to the Form Library slug for an unknown product", () => {
+      expect(sourceUrl("Unknown", "Foo"))
+        .toBe("https://surveyjs.io/form-library/documentation/api-reference/foo");
+    });
+
+    test("honours a custom base URL (without a trailing slash)", () => {
+      expect(sourceUrl("Form Library", "Foo", "https://example.com/docs/"))
+        .toBe("https://example.com/docs/form-library/documentation/api-reference/foo");
+    });
+
+    test("the detected/overridden product drives the source URL in the file", () => {
+      const docs = runDocGenerator("smoke");
+      const files = runMDGenerator(docs.classes, docs.pmes, { product: "PDF Generator" });
+      expect(files["SimpleModel.md"])
+        .toContain("source: https://surveyjs.io/pdf-generator/documentation/api-reference/simplemodel");
     });
   });
 

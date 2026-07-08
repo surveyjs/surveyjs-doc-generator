@@ -1032,6 +1032,17 @@ function detectProduct(fileNames, cwd) {
   }
   return "Form Library";
 }
+var libraryNames = {
+  "Form Library": "form-library",
+  "Survey Creator": "survey-creator",
+  "Dashboard": "dashboard",
+  "PDF Generator": "pdf-generator"
+};
+function sourceUrl(product, className, baseUrl) {
+  const base = (baseUrl || "https://surveyjs.io").replace(/\/+$/, "");
+  const library = libraryNames[product] || libraryNames["Form Library"];
+  return base + "/" + library + "/documentation/api-reference/" + (className || "").toLowerCase();
+}
 function generateMDFiles(classes, pmes, options = {}) {
   if (!Array.isArray(classes)) return;
   const members = Array.isArray(pmes) ? pmes : [];
@@ -1105,7 +1116,7 @@ function isVisibleMember(member) {
 function frontMatter(cls, product, isInterface, sourceBaseUrl) {
   const title = cls.metaTitle || cls.name || "";
   const description = oneLine(cls.metaDescription || cls.documentation);
-  const source = sourceBaseUrl ? sourceBaseUrl + cls.name : "";
+  const source = sourceUrl(product, cls.name, sourceBaseUrl);
   const lines = [
     "---",
     "title: " + yamlScalar(title),
@@ -1194,7 +1205,8 @@ function tableCell(text) {
 function yamlScalar(value) {
   const text = oneLine(value);
   if (text === "") return "";
-  if (/[:#"'\[\]{}&*!|>%@`]/.test(text) || /^[-?]/.test(text)) {
+  const needsQuoting = /:(\s|$)/.test(text) || /\s#/.test(text) || /["\\]/.test(text) || /^[-?:,\[\]{}#&*!|>'"%@`]/.test(text);
+  if (needsQuoting) {
     return '"' + text.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
   }
   return text;
