@@ -60,7 +60,7 @@ export function generateMDFiles(
   const product = options.product || detectProduct(options.fileNames, process.cwd());
   for (let i = 0; i < classes.length; i++) {
     const cls = classes[i];
-    if (!isClassOrInterface(cls) || !cls.name) continue;
+    if (!isClassOrInterface(cls) || !cls.name || !hasDescription(cls)) continue;
     const content = generateMDForClass(cls, members, product, options.sourceBaseUrl);
     fs.writeFileSync(path.join(outputDir, cls.name + ".md"), content);
   }
@@ -77,7 +77,7 @@ export function generateIndexMD(classes: DocEntry[], pmes: DocEntry[]): string {
   const members = Array.isArray(pmes) ? pmes : [];
   const entries = (Array.isArray(classes) ? classes : [])
     .filter((cls) => !!cls && cls.entryType === DocEntryType.classType
-      && !!cls.name && !!(cls.documentation || "").trim())
+      && !!cls.name && hasDescription(cls))
     .map((cls) => ({
       name: cls.name,
       sentence: firstSentence(stripMarkdownLinks(cls.documentation)),
@@ -90,6 +90,11 @@ export function generateIndexMD(classes: DocEntry[], pmes: DocEntry[]): string {
     lines.push("- `" + entry.name + "`" + (entry.sentence ? " — " + entry.sentence : ""));
   }
   return lines.join("\n") + "\n";
+}
+
+/** True when the entry has a non-empty description. */
+function hasDescription(cls: DocEntry): boolean {
+  return !!cls && !!(cls.documentation || "").trim();
 }
 
 /** Replaces Markdown links `[label](url)` with just their `label`. */
@@ -141,7 +146,7 @@ export function generateMDForClass(
 }
 
 function isVisibleMember(member: DocEntry): boolean {
-  return member.isHidden !== true && member.isProtected !== true;
+  return member.isHidden !== true && member.isProtected !== true && hasDescription(member);
 }
 
 function frontMatter(

@@ -20,6 +20,20 @@ describe("generateMDFiles", () => {
       expect(files["NotDocumented.md"]).toBeUndefined();
     });
 
+    test("classes and interfaces without a description do not produce a file", () => {
+      const classes = [
+        { name: "Documented", entryType: 1, documentation: "A documented class." },
+        { name: "NoDocClass", entryType: 1, documentation: "   " },
+        { name: "IDocumented", entryType: 2, documentation: "A documented interface." },
+        { name: "INoDocIface", entryType: 2, documentation: "" }
+      ];
+      const out = runMDGenerator(classes as any, []);
+      expect(out["Documented.md"]).toBeDefined();
+      expect(out["IDocumented.md"]).toBeDefined();
+      expect(out["NoDocClass.md"]).toBeUndefined();
+      expect(out["INoDocIface.md"]).toBeUndefined();
+    });
+
     test("front matter carries the title, product and api-type", () => {
       expect(md).toContain("---\n");
       expect(md).toContain("title: SimpleModel");
@@ -46,6 +60,21 @@ describe("generateMDFiles", () => {
       expect(md).toContain("**Return value:** `string` &ndash; The greeting text.");
       expect(md).toContain("**Parameters:**");
       expect(md).toContain("| `name` | `string` | A person name. |");
+    });
+
+    test("members without a description are not rendered", () => {
+      const classes = [{ name: "Sample", entryType: 1, documentation: "A sample class." }];
+      const pmes = [
+        { className: "Sample", name: "documentedProp", pmeType: "property", type: "string", documentation: "A documented property." },
+        { className: "Sample", name: "silentProp", pmeType: "property", type: "string", documentation: "" },
+        { className: "Sample", name: "documentedMethod", pmeType: "method", returnType: "void", documentation: "A documented method." },
+        { className: "Sample", name: "silentMethod", pmeType: "method", returnType: "void", documentation: "   " }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("### `documentedProp`");
+      expect(md).toContain("### `documentedMethod()`");
+      expect(md).not.toContain("silentProp");
+      expect(md).not.toContain("silentMethod");
     });
   });
 
@@ -121,13 +150,13 @@ describe("generateMDFiles", () => {
       { name: "IPanel", entryType: 2, documentation: "A panel interface. Should be excluded." }
     ];
     const pmes = [
-      { className: "SurveyModel", name: "a", pmeType: "property" },
-      { className: "SurveyModel", name: "b", pmeType: "property" },
-      { className: "SurveyModel", name: "c", pmeType: "method" },
-      { className: "MidClass", name: "m1", pmeType: "property" },
-      { className: "MidClass", name: "m2", pmeType: "property" },
-      { className: "SmallHelper", name: "x", pmeType: "property" },
-      { className: "IPanel", name: "name", pmeType: "property" }
+      { className: "SurveyModel", name: "a", pmeType: "property", documentation: "Prop a." },
+      { className: "SurveyModel", name: "b", pmeType: "property", documentation: "Prop b." },
+      { className: "SurveyModel", name: "c", pmeType: "method", documentation: "Method c." },
+      { className: "MidClass", name: "m1", pmeType: "property", documentation: "Prop m1." },
+      { className: "MidClass", name: "m2", pmeType: "property", documentation: "Prop m2." },
+      { className: "SmallHelper", name: "x", pmeType: "property", documentation: "Prop x." },
+      { className: "IPanel", name: "name", pmeType: "property", documentation: "Name." }
     ];
     const md = generateIndexMD(classes as any, pmes as any);
 

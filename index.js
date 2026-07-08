@@ -1040,7 +1040,7 @@ function generateMDFiles(classes, pmes, options = {}) {
   const product = options.product || detectProduct(options.fileNames, process.cwd());
   for (let i = 0; i < classes.length; i++) {
     const cls = classes[i];
-    if (!isClassOrInterface(cls) || !cls.name) continue;
+    if (!isClassOrInterface(cls) || !cls.name || !hasDescription(cls)) continue;
     const content = generateMDForClass(cls, members, product, options.sourceBaseUrl);
     fs3.writeFileSync(path3.join(outputDir, cls.name + ".md"), content);
   }
@@ -1048,7 +1048,7 @@ function generateMDFiles(classes, pmes, options = {}) {
 }
 function generateIndexMD(classes, pmes) {
   const members = Array.isArray(pmes) ? pmes : [];
-  const entries = (Array.isArray(classes) ? classes : []).filter((cls) => !!cls && cls.entryType === 1 /* classType */ && !!cls.name && !!(cls.documentation || "").trim()).map((cls) => ({
+  const entries = (Array.isArray(classes) ? classes : []).filter((cls) => !!cls && cls.entryType === 1 /* classType */ && !!cls.name && hasDescription(cls)).map((cls) => ({
     name: cls.name,
     sentence: firstSentence(stripMarkdownLinks(cls.documentation)),
     count: members.filter((p) => p.className === cls.name && isVisibleMember(p)).length
@@ -1059,6 +1059,9 @@ function generateIndexMD(classes, pmes) {
     lines.push("- `" + entry.name + "`" + (entry.sentence ? " \u2014 " + entry.sentence : ""));
   }
   return lines.join("\n") + "\n";
+}
+function hasDescription(cls) {
+  return !!cls && !!(cls.documentation || "").trim();
 }
 function stripMarkdownLinks(text) {
   if (!text) return "";
@@ -1097,7 +1100,7 @@ function generateMDForClass(cls, pmes, product, sourceBaseUrl) {
   return parts.join("\n\n") + "\n";
 }
 function isVisibleMember(member) {
-  return member.isHidden !== true && member.isProtected !== true;
+  return member.isHidden !== true && member.isProtected !== true && hasDescription(member);
 }
 function frontMatter(cls, product, isInterface, sourceBaseUrl) {
   const title = cls.metaTitle || cls.name || "";
