@@ -30,6 +30,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   generateDocumentation: () => generateDocumentation,
+  generateMDFiles: () => generateMDFiles,
   setJsonObj: () => setJsonObj
 });
 module.exports = __toCommonJS(index_exports);
@@ -43,7 +44,7 @@ function setJsonObj(obj) {
 
 // src/generator.ts
 var ts5 = __toESM(require("typescript"));
-var fs3 = __toESM(require("fs"));
+var fs4 = __toESM(require("fs"));
 
 // src/options.ts
 var ts = __toESM(require("typescript"));
@@ -1012,6 +1013,165 @@ function getReferenceType(ctx, type) {
   return { $href: "#" + curClass.jsonName };
 }
 
+// src/md-generator.ts
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
+var productRules = [
+  { product: "PDF Generator", keywords: ["pdf"] },
+  { product: "Survey Creator", keywords: ["creator"] },
+  { product: "Dashboard", keywords: ["dashboard", "analytics"] }
+];
+function detectProduct(fileNames, cwd) {
+  const parts = [];
+  if (Array.isArray(fileNames)) parts.push(...fileNames);
+  if (cwd) parts.push(cwd);
+  const haystack = parts.join(" ").replace(/\\/g, "/").toLowerCase();
+  for (let i = 0; i < productRules.length; i++) {
+    const rule = productRules[i];
+    if (rule.keywords.some((k) => haystack.indexOf(k) > -1)) return rule.product;
+  }
+  return "Form Library";
+}
+function generateMDFiles(classes, pmes, options = {}) {
+  if (!Array.isArray(classes)) return;
+  const members = Array.isArray(pmes) ? pmes : [];
+  const outputDir = options.outputDir || path3.join(process.cwd(), "docs", "api");
+  ensureDir(outputDir);
+  const product = options.product || detectProduct(options.fileNames, process.cwd());
+  for (let i = 0; i < classes.length; i++) {
+    const cls = classes[i];
+    if (!isClassOrInterface(cls) || !cls.name) continue;
+    const content = generateMDForClass(cls, members, product, options.sourceBaseUrl);
+    fs3.writeFileSync(path3.join(outputDir, cls.name + ".md"), content);
+  }
+}
+function ensureDir(dir) {
+  if (!fs3.existsSync(dir)) {
+    fs3.mkdirSync(dir, { recursive: true });
+  }
+}
+function isClassOrInterface(cls) {
+  return !!cls && (cls.entryType === 1 /* classType */ || cls.entryType === 2 /* interfaceType */);
+}
+function generateMDForClass(cls, pmes, product, sourceBaseUrl) {
+  const isInterface = cls.entryType === 2 /* interfaceType */;
+  const members = pmes.filter((p) => p.className === cls.name && isVisibleMember(p));
+  const properties = members.filter((p) => p.pmeType === "property");
+  const methods = members.filter((p) => p.pmeType === "method");
+  const events = members.filter((p) => p.pmeType === "event");
+  const parts = [];
+  parts.push(frontMatter(cls, product, isInterface, sourceBaseUrl));
+  parts.push("# `" + cls.name + "`");
+  const description = (cls.documentation || "").trim();
+  if (description) parts.push(description);
+  const inheritance = inheritanceSection(cls);
+  if (inheritance) parts.push(inheritance);
+  if (properties.length > 0) parts.push(propertiesSection(properties));
+  if (methods.length > 0) parts.push(methodsSection(methods));
+  if (events.length > 0) parts.push(eventsSection(events));
+  return parts.join("\n\n") + "\n";
+}
+function isVisibleMember(member) {
+  return member.isHidden !== true && member.isProtected !== true;
+}
+function frontMatter(cls, product, isInterface, sourceBaseUrl) {
+  const title = cls.metaTitle || cls.name || "";
+  const description = oneLine(cls.metaDescription || cls.documentation);
+  const source = sourceBaseUrl ? sourceBaseUrl + cls.name : "";
+  const lines = [
+    "---",
+    "title: " + yamlScalar(title),
+    "product: " + yamlScalar(product),
+    "api-type: " + (isInterface ? "interface" : "class"),
+    "description: " + yamlScalar(description),
+    "source: " + yamlScalar(source),
+    "---"
+  ];
+  return lines.join("\n");
+}
+function inheritanceSection(cls) {
+  const all = Array.isArray(cls.allTypes) && cls.allTypes.length > 0 ? cls.allTypes : [cls.name];
+  if (all.length <= 1) return "";
+  const chain = all.slice().reverse().map((t) => "`" + t + "`").join(" &rarr; ");
+  return "## Inheritance\n\n" + chain;
+}
+function propertiesSection(properties) {
+  const blocks = properties.map((prop) => {
+    const lines = ["### `" + prop.name + "`"];
+    const doc = (prop.documentation || "").trim();
+    if (doc) lines.push(doc);
+    lines.push("**Type**: `" + typeString(prop.type, prop.returnTypeGenerics) + "`");
+    return lines.join("\n\n");
+  });
+  return "## Properties\n\n" + blocks.join("\n\n");
+}
+function methodsSection(methods) {
+  const blocks = methods.map((method) => {
+    const lines = ["### `" + method.name + "()`"];
+    const doc = (method.documentation || "").trim();
+    if (doc) lines.push(doc);
+    const returnValue = returnValueLine(method);
+    if (returnValue) lines.push(returnValue);
+    const table = parametersTable(method.parameters);
+    if (table) lines.push("**Parameters:**\n\n" + table);
+    return lines.join("\n\n");
+  });
+  return "## Methods\n\n" + blocks.join("\n\n");
+}
+function eventsSection(events) {
+  const blocks = events.map((event) => {
+    const lines = ["### `" + event.name + "`"];
+    const doc = (event.documentation || "").trim();
+    if (doc) lines.push(doc);
+    return lines.join("\n\n");
+  });
+  return "## Events\n\n" + blocks.join("\n\n");
+}
+function returnValueLine(method) {
+  const type = typeString(method.returnType, method.returnTypeGenerics);
+  if (!type || type === "void") return "";
+  const returnDoc = oneLine(method.returnDocumentation);
+  let line = "**Return value:** `" + type + "`";
+  if (returnDoc) line += " &ndash; " + returnDoc;
+  return line;
+}
+function parametersTable(parameters) {
+  if (!Array.isArray(parameters) || parameters.length === 0) return "";
+  const rows = [
+    "| Name | Type | Description |",
+    "| ---- | ---- | ----------- |"
+  ];
+  for (let i = 0; i < parameters.length; i++) {
+    const param = parameters[i];
+    rows.push(
+      "| `" + tableCell(param.name) + "` | `" + tableCell(param.type) + "` | " + tableCell(param.documentation) + " |"
+    );
+  }
+  return rows.join("\n");
+}
+function typeString(type, generics) {
+  const base = type || "any";
+  if (Array.isArray(generics) && generics.length > 0) {
+    return base + "<" + generics.join(", ") + ">";
+  }
+  return base;
+}
+function oneLine(text) {
+  if (!text) return "";
+  return String(text).replace(/\s+/g, " ").trim();
+}
+function tableCell(text) {
+  return oneLine(text).replace(/\|/g, "\\|");
+}
+function yamlScalar(value) {
+  const text = oneLine(value);
+  if (text === "") return "";
+  if (/[:#"'\[\]{}&*!|>%@`]/.test(text) || /^[-?]/.test(text)) {
+    return '"' + text.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  }
+  return text;
+}
+
 // src/generator.ts
 function generateDocumentation(fileNames, options, docOptions = {}) {
   const ctx = {
@@ -1049,19 +1209,24 @@ function generateDocumentation(fileNames, options, docOptions = {}) {
   }
   updateEventsDocumentation(ctx);
   updateHiddenForEntriesDoc(ctx);
-  fs3.writeFileSync(
-    process.cwd() + "/docs/classes.json",
-    JSON.stringify(ctx.outputClasses, void 0, 4)
-  );
-  fs3.writeFileSync(
-    process.cwd() + "/docs/pmes.json",
-    JSON.stringify(ctx.outputPMEs, void 0, 4)
-  );
+  if (docOptions.generateMDFiles === true) {
+    const mdOptions = Object.assign({ fileNames }, docOptions.mdOptions);
+    generateMDFiles(ctx.outputClasses, ctx.outputPMEs, mdOptions);
+  } else {
+    fs4.writeFileSync(
+      process.cwd() + "/docs/classes.json",
+      JSON.stringify(ctx.outputClasses, void 0, 4)
+    );
+    fs4.writeFileSync(
+      process.cwd() + "/docs/pmes.json",
+      JSON.stringify(ctx.outputPMEs, void 0, 4)
+    );
+  }
   if (ctx.generateJSONDefinition) {
     ctx.outputDefinition["$schema"] = "http://json-schema.org/draft-07/schema#";
     ctx.outputDefinition["title"] = "SurveyJS Library json schema";
     addClassIntoJSONDefinition(ctx, "SurveyModel", true);
-    fs3.writeFileSync(
+    fs4.writeFileSync(
       process.cwd() + "/docs/surveyjs_definition.json",
       JSON.stringify(ctx.outputDefinition, void 0, 4)
     );
@@ -1071,5 +1236,6 @@ function generateDocumentation(fileNames, options, docOptions = {}) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   generateDocumentation,
+  generateMDFiles,
   setJsonObj
 });

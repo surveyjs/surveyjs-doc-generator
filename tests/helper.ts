@@ -1,4 +1,4 @@
-import { generateDocumentation, setJsonObj } from "../index.ts";
+import { generateDocumentation, setJsonObj, generateMDFiles } from "../index.ts";
 
 export interface DocsResult {
   classes: any[];
@@ -49,4 +49,43 @@ export function runDocGenerator(fixtureName: string, jsonObj: any = null): DocsR
     filterPMEs: (className: string, name?: string) =>
       pmes.filter((p: any) => p.className === className && (!name || p.name === name))
   };
+}
+
+/**
+ * Runs generateMDFiles on the supplied classes/pmes and returns a map of the
+ * generated markdown keyed by file name (e.g. "SimpleModel.md").
+ *
+ * Reuses the same fs.writeFileSync mock as runDocGenerator (see tests/setup.ts):
+ * the content is recorded in memory instead of being written to docs/api.
+ */
+export function runMDGenerator(
+  classes: any[], pmes: any[], options: any = {}
+): { [fileName: string]: string } {
+  const written: { [name: string]: string } = {};
+  (globalThis as any).__writtenFiles = written;
+  try {
+    generateMDFiles(classes, pmes, options);
+  } finally {
+    (globalThis as any).__writtenFiles = undefined;
+  }
+  return written;
+}
+
+/**
+ * Runs the full generateDocumentation pipeline on a fixture and returns every
+ * file it wrote, keyed by base name (e.g. "classes.json", "SimpleModel.md").
+ * Use this to assert which artifacts a given set of docOptions produces.
+ */
+export function runFullGenerator(
+  fixtureName: string, docOptions: any = {}
+): { [fileName: string]: string } {
+  const entryFile = "tests/fixtures/" + fixtureName + ".entry.ts";
+  const written: { [name: string]: string } = {};
+  (globalThis as any).__writtenFiles = written;
+  try {
+    generateDocumentation([entryFile], {}, docOptions);
+  } finally {
+    (globalThis as any).__writtenFiles = undefined;
+  }
+  return written;
 }

@@ -16,9 +16,17 @@ vi.mock("fs", async (importOriginal) => {
     }
     actual.writeFileSync(file, data);
   });
+  // generateMDFiles creates the docs/api directory before writing. While a
+  // capture is active, skip touching the real filesystem.
+  const mkdirSync = vi.fn((dir: any, opts?: any): any => {
+    const store = (globalThis as any).__writtenFiles;
+    if (store) return undefined;
+    return actual.mkdirSync(dir, opts);
+  });
   return {
     ...actual,
     writeFileSync: writeFileSync,
-    default: { ...actual, writeFileSync: writeFileSync }
+    mkdirSync: mkdirSync,
+    default: { ...actual, writeFileSync: writeFileSync, mkdirSync: mkdirSync }
   };
 });

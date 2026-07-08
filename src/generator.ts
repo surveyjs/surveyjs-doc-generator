@@ -9,6 +9,7 @@ import { setAllParentTypes } from "./inheritance";
 import { visit } from "./visitor";
 import { updateEventsDocumentation, updateHiddenForEntriesDoc } from "./event-docs";
 import { addClassIntoJSONDefinition } from "./json-definition";
+import { generateMDFiles } from "./md-generator";
 
 /** Generate documentation for all classes in a set of .ts files */
 export function generateDocumentation(
@@ -54,15 +55,21 @@ export function generateDocumentation(
   }
   updateEventsDocumentation(ctx);
   updateHiddenForEntriesDoc(ctx);
-  // print out the doc
-  fs.writeFileSync(
-    process.cwd() + "/docs/classes.json",
-    JSON.stringify(ctx.outputClasses, undefined, 4)
-  );
-  fs.writeFileSync(
-    process.cwd() + "/docs/pmes.json",
-    JSON.stringify(ctx.outputPMEs, undefined, 4)
-  );
+  if (docOptions.generateMDFiles === true) {
+    // Generate Markdown documentation instead of the intermediate JSON files.
+    const mdOptions = Object.assign({ fileNames: fileNames }, docOptions.mdOptions);
+    generateMDFiles(ctx.outputClasses, ctx.outputPMEs, mdOptions);
+  } else {
+    // print out the doc
+    fs.writeFileSync(
+      process.cwd() + "/docs/classes.json",
+      JSON.stringify(ctx.outputClasses, undefined, 4)
+    );
+    fs.writeFileSync(
+      process.cwd() + "/docs/pmes.json",
+      JSON.stringify(ctx.outputPMEs, undefined, 4)
+    );
+  }
   if (ctx.generateJSONDefinition) {
     ctx.outputDefinition["$schema"] = "http://json-schema.org/draft-07/schema#";
     ctx.outputDefinition["title"] = "SurveyJS Library json schema";
