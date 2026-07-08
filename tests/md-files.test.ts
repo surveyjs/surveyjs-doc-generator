@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll } from "vitest";
 import { runDocGenerator, runMDGenerator, runFullGenerator, DocsResult } from "./helper";
-import { detectProduct } from "../src/md-generator";
+import { detectProduct, generateIndexMD } from "../src/md-generator";
 
 describe("generateMDFiles", () => {
   describe("class file (smoke fixture)", () => {
@@ -108,6 +108,75 @@ describe("generateMDFiles", () => {
       const docs = runDocGenerator("smoke");
       const files = runMDGenerator(docs.classes, docs.pmes, { product: "Survey Creator" });
       expect(files["SimpleModel.md"]).toContain("product: Survey Creator");
+    });
+  });
+
+  describe("index file", () => {
+    // Hand-built entries give full control over member counts and descriptions.
+    const classes = [
+      { name: "SmallHelper", entryType: 1, documentation: "A small helper class. Extra sentence here." },
+      { name: "SurveyModel", entryType: 1, documentation: "The main survey model. It does a lot of things." },
+      { name: "MidClass", entryType: 1, documentation: "A mid-sized class. Second sentence." },
+      { name: "NoDescription", entryType: 1, documentation: "   " },
+      { name: "IPanel", entryType: 2, documentation: "A panel interface. Should be excluded." }
+    ];
+    const pmes = [
+      { className: "SurveyModel", name: "a", pmeType: "property" },
+      { className: "SurveyModel", name: "b", pmeType: "property" },
+      { className: "SurveyModel", name: "c", pmeType: "method" },
+      { className: "MidClass", name: "m1", pmeType: "property" },
+      { className: "MidClass", name: "m2", pmeType: "property" },
+      { className: "SmallHelper", name: "x", pmeType: "property" },
+      { className: "IPanel", name: "name", pmeType: "property" }
+    ];
+    const md = generateIndexMD(classes as any, pmes as any);
+
+    test("lists a class with only the first sentence of its description", () => {
+      expect(md).toContain("`SurveyModel`");
+      expect(md).toContain("The main survey model.");
+      expect(md).not.toContain("It does a lot of things.");
+      expect(md).toContain("A small helper class.");
+      expect(md).not.toContain("Extra sentence here.");
+    });
+
+    test("classes are ordered by API member count, most members first", () => {
+      const posSurvey = md.indexOf("SurveyModel");
+      const posMid = md.indexOf("MidClass");
+      const posSmall = md.indexOf("SmallHelper");
+      expect(posSurvey).toBeGreaterThan(-1);
+      expect(posSurvey).toBeLessThan(posMid);
+      expect(posMid).toBeLessThan(posSmall);
+    });
+
+    test("interfaces are not listed", () => {
+      expect(md).not.toContain("IPanel");
+    });
+
+    test("classes without a description are not listed", () => {
+      expect(md).not.toContain("NoDescription");
+    });
+
+    test("no links or file references are added", () => {
+      expect(md).not.toContain("](");
+      expect(md).not.toContain(".md");
+    });
+
+    test("inline markdown links in the description are stripped to plain text", () => {
+      const linked = [
+        { name: "Linked", entryType: 1, documentation: "See the [`PanelModel`](https://example.com/panel) class for details." }
+      ];
+      const out = generateIndexMD(linked as any, []);
+      expect(out).toContain("See the `PanelModel` class for details.");
+      expect(out).not.toContain("](");
+      expect(out).not.toContain("https://");
+    });
+
+    test("generateMDFiles writes an index.md alongside the class files", () => {
+      const docs = runDocGenerator("smoke");
+      const files = runMDGenerator(docs.classes, docs.pmes);
+      expect(files["index.md"]).toBeDefined();
+      expect(files["index.md"]).toContain("`SimpleModel`");
+      expect(files["index.md"]).toContain("A simple model class.");
     });
   });
 

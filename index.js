@@ -1044,6 +1044,31 @@ function generateMDFiles(classes, pmes, options = {}) {
     const content = generateMDForClass(cls, members, product, options.sourceBaseUrl);
     fs3.writeFileSync(path3.join(outputDir, cls.name + ".md"), content);
   }
+  fs3.writeFileSync(path3.join(outputDir, "index.md"), generateIndexMD(classes, members));
+}
+function generateIndexMD(classes, pmes) {
+  const members = Array.isArray(pmes) ? pmes : [];
+  const entries = (Array.isArray(classes) ? classes : []).filter((cls) => !!cls && cls.entryType === 1 /* classType */ && !!cls.name && !!(cls.documentation || "").trim()).map((cls) => ({
+    name: cls.name,
+    sentence: firstSentence(stripMarkdownLinks(cls.documentation)),
+    count: members.filter((p) => p.className === cls.name && isVisibleMember(p)).length
+  })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const lines = ["---", "title: Classes", "---", "", "# Classes", ""];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    lines.push("- `" + entry.name + "`" + (entry.sentence ? " \u2014 " + entry.sentence : ""));
+  }
+  return lines.join("\n") + "\n";
+}
+function stripMarkdownLinks(text) {
+  if (!text) return "";
+  return String(text).replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+}
+function firstSentence(text) {
+  const line = oneLine(text);
+  if (!line) return "";
+  const match = line.match(/^.*?[.!?](?=\s|$)/);
+  return match ? match[0] : line;
 }
 function ensureDir(dir) {
   if (!fs3.existsSync(dir)) {

@@ -64,6 +64,46 @@ export function generateMDFiles(
     const content = generateMDForClass(cls, members, product, options.sourceBaseUrl);
     fs.writeFileSync(path.join(outputDir, cls.name + ".md"), content);
   }
+  fs.writeFileSync(path.join(outputDir, "index.md"), generateIndexMD(classes, members));
+}
+
+/**
+ * Builds the content of `index.md`: a plain list of documented classes
+ * (interfaces excluded), each shown as the class name plus the first sentence
+ * of its description. Classes are ordered by the number of API members they
+ * expose, most members first (e.g. `SurveyModel` leads the list).
+ */
+export function generateIndexMD(classes: DocEntry[], pmes: DocEntry[]): string {
+  const members = Array.isArray(pmes) ? pmes : [];
+  const entries = (Array.isArray(classes) ? classes : [])
+    .filter((cls) => !!cls && cls.entryType === DocEntryType.classType
+      && !!cls.name && !!(cls.documentation || "").trim())
+    .map((cls) => ({
+      name: cls.name,
+      sentence: firstSentence(stripMarkdownLinks(cls.documentation)),
+      count: members.filter((p) => p.className === cls.name && isVisibleMember(p)).length
+    }))
+    .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name));
+  const lines = ["---", "title: Classes", "---", "", "# Classes", ""];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    lines.push("- `" + entry.name + "`" + (entry.sentence ? " — " + entry.sentence : ""));
+  }
+  return lines.join("\n") + "\n";
+}
+
+/** Replaces Markdown links `[label](url)` with just their `label`. */
+function stripMarkdownLinks(text: any): string {
+  if (!text) return "";
+  return String(text).replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+}
+
+/** Returns the first sentence (up to the first `.`/`!`/`?`) of a text. */
+function firstSentence(text: any): string {
+  const line = oneLine(text);
+  if (!line) return "";
+  const match = line.match(/^.*?[.!?](?=\s|$)/);
+  return match ? match[0] : line;
 }
 
 function ensureDir(dir: string): void {
