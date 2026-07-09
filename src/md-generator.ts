@@ -92,31 +92,42 @@ export function generateMDFiles(
 }
 
 /**
- * Builds the content of `index.md`: a list of documented classes (interfaces
- * excluded), each shown as a link to the class API-reference page plus the
- * first sentence of its description. Classes are ordered by the number of API
- * members they expose, most members first (e.g. `SurveyModel` leads the list).
+ * Builds the content of `index.md`: a list of documented classes followed by a
+ * list of documented interfaces. Each entry is shown as a link to its
+ * API-reference page plus the first sentence of its description. Entries are
+ * ordered by the number of API members they expose, most members first
+ * (e.g. `SurveyModel` leads the class list).
  */
 export function generateIndexMD(
   classes: DocEntry[], pmes: DocEntry[], product: string = "Form Library", sourceBaseUrl?: string
 ): string {
   const members = Array.isArray(pmes) ? pmes : [];
-  const entries = (Array.isArray(classes) ? classes : [])
-    .filter((cls) => !!cls && cls.entryType === DocEntryType.classType
-      && !!cls.name && hasDescription(cls))
+  const all = Array.isArray(classes) ? classes : [];
+  const lines = ["---", "title: Classes and Interfaces", "---"];
+  addIndexSection(lines, "Classes", all, DocEntryType.classType, members, product, sourceBaseUrl);
+  addIndexSection(lines, "Interfaces", all, DocEntryType.interfaceType, members, product, sourceBaseUrl);
+  return lines.join("\n") + "\n";
+}
+
+/** Appends one `# <title>` section listing all entries of the given entry type. */
+function addIndexSection(
+  lines: string[], title: string, classes: DocEntry[], entryType: DocEntryType,
+  members: DocEntry[], product: string, sourceBaseUrl?: string
+): void {
+  const entries = classes
+    .filter((cls) => !!cls && cls.entryType === entryType && !!cls.name && hasDescription(cls))
     .map((cls) => ({
       name: cls.name,
       sentence: firstSentence(stripMarkdownLinks(cls.documentation)),
       count: members.filter((p) => p.className === cls.name && isVisibleMember(p)).length
     }))
     .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name));
-  const lines = ["---", "title: Classes", "---", "", "# Classes", ""];
+  lines.push("", "# " + title, "");
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const link = "[`" + entry.name + "`](" + sourceUrl(product, entry.name, sourceBaseUrl) + ".md)";
     lines.push("- " + link + (entry.sentence ? " — " + entry.sentence : ""));
   }
-  return lines.join("\n") + "\n";
 }
 
 /** True when the entry has a non-empty description. */

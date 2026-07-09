@@ -205,7 +205,9 @@ describe("generateMDFiles", () => {
       { name: "SurveyModel", entryType: 1, documentation: "The main survey model. It does a lot of things." },
       { name: "MidClass", entryType: 1, documentation: "A mid-sized class. Second sentence." },
       { name: "NoDescription", entryType: 1, documentation: "   " },
-      { name: "IPanel", entryType: 2, documentation: "A panel interface. Should be excluded." }
+      { name: "IPanel", entryType: 2, documentation: "A panel interface. Second sentence." },
+      { name: "ISmallOne", entryType: 2, documentation: "A small interface. Second sentence." },
+      { name: "INoDescription", entryType: 2, documentation: "   " }
     ];
     const pmes = [
       { className: "SurveyModel", name: "a", pmeType: "property", documentation: "Prop a." },
@@ -214,7 +216,9 @@ describe("generateMDFiles", () => {
       { className: "MidClass", name: "m1", pmeType: "property", documentation: "Prop m1." },
       { className: "MidClass", name: "m2", pmeType: "property", documentation: "Prop m2." },
       { className: "SmallHelper", name: "x", pmeType: "property", documentation: "Prop x." },
-      { className: "IPanel", name: "name", pmeType: "property", documentation: "Name." }
+      { className: "IPanel", name: "name", pmeType: "property", documentation: "Name." },
+      { className: "IPanel", name: "title", pmeType: "property", documentation: "Title." },
+      { className: "ISmallOne", name: "id", pmeType: "property", documentation: "Id." }
     ];
     const md = generateIndexMD(classes as any, pmes as any);
 
@@ -235,11 +239,23 @@ describe("generateMDFiles", () => {
       expect(posMid).toBeLessThan(posSmall);
     });
 
-    test("interfaces are not listed", () => {
-      expect(md).not.toContain("IPanel");
+    test("interfaces are listed in their own section, after the classes", () => {
+      const posClasses = md.indexOf("# Classes");
+      const posInterfaces = md.indexOf("# Interfaces");
+      expect(posClasses).toBeGreaterThan(-1);
+      expect(posClasses).toBeLessThan(posInterfaces);
+      expect(md.indexOf("SurveyModel")).toBeLessThan(posInterfaces);
+      expect(md.indexOf("IPanel")).toBeGreaterThan(posInterfaces);
     });
 
-    test("classes without a description are not listed", () => {
+    test("interfaces follow the class rules: first sentence, member count order, link", () => {
+      expect(md).toContain(
+        "- [`IPanel`](https://surveyjs.io/form-library/documentation/api-reference/ipanel.md) — A panel interface."
+      );
+      expect(md.indexOf("IPanel")).toBeLessThan(md.indexOf("ISmallOne"));
+    });
+
+    test("classes and interfaces without a description are not listed", () => {
       expect(md).not.toContain("NoDescription");
     });
 
