@@ -210,11 +210,12 @@ function inheritanceSection(cls: DocEntry): string {
 
 function propertiesSection(properties: DocEntry[]): string {
   const blocks = properties.map((prop) => {
-    // Order: name (heading), type, description.
+    // Order: name (heading), type, description, then the related APIs.
     const lines = ["### `" + prop.name + "`"];
     lines.push("**Type**: `" + typeString(prop.type, prop.returnTypeGenerics) + "`");
     const doc = (prop.documentation || "").trim();
     if (doc) lines.push(doc);
+    addRelatedAPIs(lines, prop);
     return lines.join("\n\n");
   });
   return "## Properties\n\n" + blocks.join("\n\n");
@@ -222,7 +223,7 @@ function propertiesSection(properties: DocEntry[]): string {
 
 function methodsSection(methods: DocEntry[]): string {
   const blocks = methods.map((method) => {
-    // Order: name (heading), type (return value), description, then parameters.
+    // Order: name (heading), type (return value), description, parameters, related APIs.
     const lines = ["### `" + method.name + "()`"];
     const returnValue = returnValueLine(method);
     if (returnValue) lines.push(returnValue);
@@ -230,6 +231,7 @@ function methodsSection(methods: DocEntry[]): string {
     if (doc) lines.push(doc);
     const table = parametersTable(method.parameters);
     if (table) lines.push("**Parameters:**\n\n" + table);
+    addRelatedAPIs(lines, method);
     return lines.join("\n\n");
   });
   return "## Methods\n\n" + blocks.join("\n\n");
@@ -240,9 +242,34 @@ function eventsSection(events: DocEntry[]): string {
     const lines = ["### `" + event.name + "`"];
     const doc = (event.documentation || "").trim();
     if (doc) lines.push(doc);
+    addRelatedAPIs(lines, event);
     return lines.join("\n\n");
   });
   return "## Events\n\n" + blocks.join("\n\n");
+}
+
+/**
+ * Appends the `**Related APIs:**` line built from the member's `@see` tags, e.g.
+ * "**Related APIs:** [`width`](#width), [`widthValue`](#widthValue)". Nothing is
+ * appended when the member has no usable `@see` tag.
+ */
+function addRelatedAPIs(lines: string[], member: DocEntry): void {
+  const names = seeNames(member.see);
+  if (names.length === 0) return;
+  const links = names.map((name) => "[`" + name + "`](#" + name + ")");
+  lines.push("**Related APIs:** " + links.join(", "));
+}
+
+/**
+ * Normalizes the `see` field into a list of API names. TypeScript 4.2 appends the
+ * next jsdoc line's `*` to the tag text (`"width *"`), so asterisks are stripped.
+ */
+function seeNames(see: any): string[] {
+  if (!see) return [];
+  const values = Array.isArray(see) ? see : [see];
+  return values
+    .map((value) => oneLine(value).replace(/\*/g, "").trim())
+    .filter((name) => !!name);
 }
 
 function returnValueLine(method: DocEntry): string {

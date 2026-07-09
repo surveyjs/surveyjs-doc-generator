@@ -177,6 +177,104 @@ describe("generateMDFiles", () => {
     });
   });
 
+  describe("related APIs (@see tags)", () => {
+    const classes = [{ name: "Sample", entryType: 1, documentation: "A sample class." }];
+
+    test("a property with @see tags ends with a Related APIs line", () => {
+      const pmes = [{
+        className: "Sample", name: "name", pmeType: "property", type: "string",
+        documentation: "The element name.", see: ["width", "widthValue"]
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Related APIs:** [`width`](#width), [`widthValue`](#widthValue)");
+    });
+
+    test("the Related APIs line is the last part of a property block", () => {
+      const pmes = [
+        {
+          className: "Sample", name: "aaa", pmeType: "property", type: "string",
+          documentation: "The A description.", see: ["width"]
+        },
+        {
+          className: "Sample", name: "bbb", pmeType: "property", type: "string",
+          documentation: "The B description."
+        }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const related = md.indexOf("**Related APIs:**");
+      expect(md.indexOf("The A description.")).toBeLessThan(related);
+      expect(related).toBeLessThan(md.indexOf("### `bbb`"));
+    });
+
+    test("a method renders Related APIs after its parameters table", () => {
+      const pmes = [{
+        className: "Sample", name: "greet", pmeType: "method", returnType: "string",
+        documentation: "Greets someone.", returnDocumentation: "The greeting text.",
+        parameters: [{ name: "who", type: "string", documentation: "A person name." }],
+        see: ["name"]
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Related APIs:** [`name`](#name)");
+      expect(md.indexOf("**Parameters:**")).toBeLessThan(md.indexOf("**Related APIs:**"));
+    });
+
+    test("an event renders Related APIs after its description", () => {
+      const pmes = [{
+        className: "Sample", name: "onComplete", pmeType: "event",
+        documentation: "An event raised on complete.", see: ["onStarted"]
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Related APIs:** [`onStarted`](#onStarted)");
+      expect(md.indexOf("An event raised on complete.")).toBeLessThan(md.indexOf("**Related APIs:**"));
+    });
+
+    test("members without @see tags get no Related APIs line", () => {
+      const pmes = [
+        {
+          className: "Sample", name: "noSee", pmeType: "property", type: "string",
+          documentation: "No see tags."
+        },
+        {
+          className: "Sample", name: "emptySee", pmeType: "property", type: "string",
+          documentation: "Empty see array.", see: []
+        },
+        {
+          className: "Sample", name: "blankSee", pmeType: "property", type: "string",
+          documentation: "Blank see entries.", see: ["", "   ", null]
+        }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).not.toContain("**Related APIs:**");
+    });
+
+    test("a see entry given as a plain string is rendered as a single link", () => {
+      const pmes = [{
+        className: "Sample", name: "name", pmeType: "property", type: "string",
+        documentation: "The element name.", see: "width"
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Related APIs:** [`width`](#width)");
+    });
+
+    test("the TypeScript trailing asterisk is stripped from a see entry", () => {
+      const pmes = [{
+        className: "Sample", name: "name", pmeType: "property", type: "string",
+        documentation: "The element name.", see: ["width *", "widthValue"]
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Related APIs:** [`width`](#width), [`widthValue`](#widthValue)");
+      expect(md).not.toContain("width *");
+    });
+
+    test("the tags fixture renders the @see tags of ElementBase.name", () => {
+      const docs = runDocGenerator("tags");
+      const files = runMDGenerator(docs.classes, docs.pmes);
+      expect(files["ElementBase.md"]).toContain(
+        "**Related APIs:** [`width`](#width), [`widthValue`](#widthValue)"
+      );
+    });
+  });
+
   describe("events (events fixture)", () => {
     test("events are rendered under an Events section with their documentation", () => {
       const docs = runDocGenerator("events");
