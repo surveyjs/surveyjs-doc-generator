@@ -171,7 +171,7 @@ export function generateMDForClass(
   parts.push("# `" + cls.name + "`");
   const description = (cls.documentation || "").trim();
   if (description) parts.push(description);
-  const inheritance = inheritanceSection(cls);
+  const inheritance = inheritanceSection(cls, product, sourceBaseUrl);
   if (inheritance) parts.push(inheritance);
   if (properties.length > 0) parts.push(propertiesSection(properties));
   if (methods.length > 0) parts.push(methodsSection(methods));
@@ -201,10 +201,15 @@ function frontMatter(
   return lines.join("\n");
 }
 
-function inheritanceSection(cls: DocEntry): string {
+function inheritanceSection(cls: DocEntry, product: string, sourceBaseUrl?: string): string {
   const all = Array.isArray(cls.allTypes) && cls.allTypes.length > 0 ? cls.allTypes : [cls.name];
   if (all.length <= 1) return "";
-  const chain = all.slice().reverse().map((t) => "`" + t + "`").join(" &rarr; ");
+  // The base types link to their API-reference pages; the class itself stays plain.
+  const chain = all.slice().reverse().map((t) => {
+    const code = "`" + t + "`";
+    if (t === cls.name) return code;
+    return "[" + code + "](" + sourceUrl(product, t, sourceBaseUrl) + ".md)";
+  }).join(" &rarr; ");
   return "## Inheritance\n\n" + chain;
 }
 

@@ -166,8 +166,11 @@ describe("generateMDFiles", () => {
       const docs = runDocGenerator("inheritance");
       const files = runMDGenerator(docs.classes, docs.pmes);
       const md = files["QuestionText.md"];
+      const base = "https://surveyjs.io/form-library/documentation/api-reference";
       expect(md).toContain("## Inheritance");
-      expect(md).toContain("`Base` &rarr; `Question` &rarr; `QuestionText`");
+      expect(md).toContain(
+        "[`Base`](" + base + "/base.md) &rarr; [`Question`](" + base + "/question.md) &rarr; `QuestionText`"
+      );
     });
 
     test("a root class without a base type has no Inheritance section", () => {
