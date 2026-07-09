@@ -45,6 +45,7 @@ function setJsonObj(obj) {
 // src/generator.ts
 var ts5 = __toESM(require("typescript"));
 var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 
 // src/options.ts
 var ts = __toESM(require("typescript"));
@@ -89,6 +90,13 @@ function checkFiles(fileNames, errorText) {
 }
 function getAbsoluteFileName(name) {
   return path.join(process.cwd(), name);
+}
+function ensureDir(dir) {
+  const absDir = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+  if (!fs.existsSync(absDir)) {
+    fs.mkdirSync(absDir, { recursive: true });
+  }
+  return absDir;
 }
 
 // src/vue-files.ts
@@ -1046,8 +1054,7 @@ function sourceUrl(product, className, baseUrl) {
 function generateMDFiles(classes, pmes, options = {}) {
   if (!Array.isArray(classes)) return;
   const members = Array.isArray(pmes) ? pmes : [];
-  const outputDir = options.outputDir || path3.join(process.cwd(), "docs", "api");
-  ensureDir(outputDir);
+  const outputDir = ensureDir(options.outputDir || path3.join(process.cwd(), "docs", "api"));
   const product = options.product || detectProduct(options.fileNames, process.cwd());
   for (let i = 0; i < classes.length; i++) {
     const cls = classes[i];
@@ -1087,11 +1094,6 @@ function firstSentence(text) {
   if (!line) return "";
   const match = line.match(/^.*?[.!?](?=\s|$)/);
   return match ? match[0] : line;
-}
-function ensureDir(dir) {
-  if (!fs3.existsSync(dir)) {
-    fs3.mkdirSync(dir, { recursive: true });
-  }
 }
 function isClassOrInterface(cls) {
   return !!cls && (cls.entryType === 1 /* classType */ || cls.entryType === 2 /* interfaceType */);
@@ -1253,16 +1255,18 @@ function generateDocumentation(fileNames, options, docOptions = {}) {
   }
   updateEventsDocumentation(ctx);
   updateHiddenForEntriesDoc(ctx);
+  const outputDir = !!docOptions.outputDir ? ensureDir(docOptions.outputDir) : path4.join(process.cwd(), "docs");
   if (docOptions.generateMDFiles === true) {
     const mdOptions = Object.assign({ fileNames }, docOptions.mdOptions);
+    if (!mdOptions.outputDir && !!docOptions.outputDir) mdOptions.outputDir = outputDir;
     generateMDFiles(ctx.outputClasses, ctx.outputPMEs, mdOptions);
   } else {
     fs4.writeFileSync(
-      process.cwd() + "/docs/classes.json",
+      path4.join(outputDir, "classes.json"),
       JSON.stringify(ctx.outputClasses, void 0, 4)
     );
     fs4.writeFileSync(
-      process.cwd() + "/docs/pmes.json",
+      path4.join(outputDir, "pmes.json"),
       JSON.stringify(ctx.outputPMEs, void 0, 4)
     );
   }
@@ -1271,7 +1275,7 @@ function generateDocumentation(fileNames, options, docOptions = {}) {
     ctx.outputDefinition["title"] = "SurveyJS Library json schema";
     addClassIntoJSONDefinition(ctx, "SurveyModel", true);
     fs4.writeFileSync(
-      process.cwd() + "/docs/surveyjs_definition.json",
+      path4.join(outputDir, "surveyjs_definition.json"),
       JSON.stringify(ctx.outputDefinition, void 0, 4)
     );
   }

@@ -17,6 +17,7 @@ doc.generateDocumentation(["entries/chunks/model.ts"], {
     target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
 }, {
     generateMDFiles: true
+    // outputDir: "docs/api" // absolute or relative to the working directory
 });
 /*
 doc.generateDocumentation(["src/index.ts"], {

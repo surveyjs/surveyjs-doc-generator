@@ -71,10 +71,14 @@ export function runMDGenerator(
   return written;
 }
 
+/** Full paths of the files written by the last runFullGenerator call. */
+export const lastWrittenPaths: string[] = [];
+
 /**
  * Runs the full generateDocumentation pipeline on a fixture and returns every
  * file it wrote, keyed by base name (e.g. "classes.json", "SimpleModel.md").
- * Use this to assert which artifacts a given set of docOptions produces.
+ * Use this to assert which artifacts a given set of docOptions produces; the
+ * directories they were written into are available in lastWrittenPaths.
  */
 export function runFullGenerator(
   fixtureName: string, docOptions: any = {}
@@ -82,10 +86,13 @@ export function runFullGenerator(
   const entryFile = "tests/fixtures/" + fixtureName + ".entry.ts";
   const written: { [name: string]: string } = {};
   (globalThis as any).__writtenFiles = written;
+  lastWrittenPaths.length = 0;
+  (globalThis as any).__writtenPaths = lastWrittenPaths;
   try {
     generateDocumentation([entryFile], {}, docOptions);
   } finally {
     (globalThis as any).__writtenFiles = undefined;
+    (globalThis as any).__writtenPaths = undefined;
   }
   return written;
 }

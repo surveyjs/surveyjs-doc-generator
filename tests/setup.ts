@@ -11,6 +11,9 @@ vi.mock("fs", async (importOriginal) => {
   const writeFileSync = vi.fn((file: any, data: any): void => {
     const store = (globalThis as any).__writtenFiles;
     if (store) {
+      // The full paths are recorded separately, for tests that assert where a file lands.
+      const paths = (globalThis as any).__writtenPaths;
+      if (paths) paths.push(file.toString());
       store[path.basename(file.toString())] = data.toString();
       return;
     }

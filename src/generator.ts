@@ -1,9 +1,10 @@
 import * as ts from "typescript";
 import * as fs from "fs";
+import * as path from "path";
 import { DocEntry } from "./types";
 import { GenerationContext } from "./context";
 import { getTsOptions } from "./options";
-import { checkFiles } from "./file-utils";
+import { checkFiles, ensureDir } from "./file-utils";
 import { generateVueTSFiles, deleteVueTSFiles, isNonEnglishLocalizationFile } from "./vue-files";
 import { setAllParentTypes } from "./inheritance";
 import { visit } from "./visitor";
@@ -11,7 +12,13 @@ import { updateEventsDocumentation, updateHiddenForEntriesDoc } from "./event-do
 import { addClassIntoJSONDefinition } from "./json-definition";
 import { generateMDFiles } from "./md-generator";
 
-/** Generate documentation for all classes in a set of .ts files */
+/**
+ * Generate documentation for all classes in a set of .ts files.
+ *
+ * `docOptions.outputDir` sets the directory for the generated files. It may be
+ * absolute or relative to the working directory and is created when missing.
+ * When it is not set, the files go to `<cwd>/docs` (Markdown to `<cwd>/docs/api`).
+ */
 export function generateDocumentation(
   fileNames: string[], options: ts.CompilerOptions, docOptions: any = {}
 ): void {
@@ -55,18 +62,22 @@ export function generateDocumentation(
   }
   updateEventsDocumentation(ctx);
   updateHiddenForEntriesDoc(ctx);
+  const outputDir = !!docOptions.outputDir
+    ? ensureDir(docOptions.outputDir)
+    : path.join(process.cwd(), "docs");
   if (docOptions.generateMDFiles === true) {
     // Generate Markdown documentation instead of the intermediate JSON files.
     const mdOptions = Object.assign({ fileNames: fileNames }, docOptions.mdOptions);
+    if (!mdOptions.outputDir && !!docOptions.outputDir) mdOptions.outputDir = outputDir;
     generateMDFiles(ctx.outputClasses, ctx.outputPMEs, mdOptions);
   } else {
     // print out the doc
     fs.writeFileSync(
-      process.cwd() + "/docs/classes.json",
+      path.join(outputDir, "classes.json"),
       JSON.stringify(ctx.outputClasses, undefined, 4)
     );
     fs.writeFileSync(
-      process.cwd() + "/docs/pmes.json",
+      path.join(outputDir, "pmes.json"),
       JSON.stringify(ctx.outputPMEs, undefined, 4)
     );
   }
@@ -75,7 +86,7 @@ export function generateDocumentation(
     ctx.outputDefinition["title"] = "SurveyJS Library json schema";
     addClassIntoJSONDefinition(ctx, "SurveyModel", true);
     fs.writeFileSync(
-      process.cwd() + "/docs/surveyjs_definition.json",
+      path.join(outputDir, "surveyjs_definition.json"),
       JSON.stringify(ctx.outputDefinition, undefined, 4)
     );
   }

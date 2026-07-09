@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DocEntry, DocEntryType } from "./types";
+import { ensureDir } from "./file-utils";
 
 export interface MDGenerationOptions {
   /**
@@ -11,7 +12,10 @@ export interface MDGenerationOptions {
   product?: string;
   /** Entry file paths used to auto-detect the product when `product` is not set. */
   fileNames?: string[];
-  /** Target directory for the generated files. Defaults to `<cwd>/docs/api`. */
+  /**
+   * Target directory for the generated files, absolute or relative to the working
+   * directory. Defaults to `<cwd>/docs/api`.
+   */
   outputDir?: string;
   /** Value written into the `source` front-matter field (e.g. a base URL to the sources). */
   sourceBaseUrl?: string;
@@ -73,8 +77,7 @@ export function generateMDFiles(
 ): void {
   if (!Array.isArray(classes)) return;
   const members = Array.isArray(pmes) ? pmes : [];
-  const outputDir = options.outputDir || path.join(process.cwd(), "docs", "api");
-  ensureDir(outputDir);
+  const outputDir = ensureDir(options.outputDir || path.join(process.cwd(), "docs", "api"));
   const product = options.product || detectProduct(options.fileNames, process.cwd());
   for (let i = 0; i < classes.length; i++) {
     const cls = classes[i];
@@ -133,12 +136,6 @@ function firstSentence(text: any): string {
   if (!line) return "";
   const match = line.match(/^.*?[.!?](?=\s|$)/);
   return match ? match[0] : line;
-}
-
-function ensureDir(dir: string): void {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
 }
 
 function isClassOrInterface(cls: DocEntry): boolean {

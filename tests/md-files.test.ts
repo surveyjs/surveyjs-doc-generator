@@ -1,6 +1,13 @@
 import { describe, test, expect, beforeAll } from "vitest";
-import { runDocGenerator, runMDGenerator, runFullGenerator, DocsResult } from "./helper";
+import * as path from "path";
+import { runDocGenerator, runMDGenerator, runFullGenerator, lastWrittenPaths, DocsResult } from "./helper";
 import { detectProduct, generateIndexMD, sourceUrl } from "../src/md-generator";
+
+/** Directory the last runFullGenerator call wrote the given file into. */
+function dirOf(fileName: string): string {
+  const filePath = lastWrittenPaths.find((p) => path.basename(p) === fileName);
+  return filePath ? path.dirname(filePath) : "";
+}
 
 describe("generateMDFiles", () => {
   describe("class file (smoke fixture)", () => {
@@ -283,6 +290,42 @@ describe("generateMDFiles", () => {
       expect(files["classes.json"]).toBeDefined();
       expect(files["pmes.json"]).toBeDefined();
       expect(files["SimpleModel.md"]).toBeUndefined();
+    });
+
+    test("without outputDir the files go to docs (Markdown to docs/api)", () => {
+      runFullGenerator("smoke", { generateDoc: true });
+      expect(dirOf("classes.json")).toBe(path.join(process.cwd(), "docs"));
+      runFullGenerator("smoke", { generateMDFiles: true });
+      expect(dirOf("SimpleModel.md")).toBe(path.join(process.cwd(), "docs", "api"));
+    });
+
+    test("outputDir sets the directory of the JSON files", () => {
+      const outputDir = path.join(process.cwd(), "out", "json");
+      runFullGenerator("smoke", { generateDoc: true, outputDir: outputDir });
+      expect(dirOf("classes.json")).toBe(outputDir);
+      expect(dirOf("pmes.json")).toBe(outputDir);
+    });
+
+    test("outputDir sets the directory of the Markdown files", () => {
+      const outputDir = path.join(process.cwd(), "out", "md");
+      runFullGenerator("smoke", { generateMDFiles: true, outputDir: outputDir });
+      expect(dirOf("SimpleModel.md")).toBe(outputDir);
+      expect(dirOf("index.md")).toBe(outputDir);
+    });
+
+    test("a relative outputDir is resolved against the working directory", () => {
+      runFullGenerator("smoke", { generateMDFiles: true, outputDir: "out/relative" });
+      expect(dirOf("SimpleModel.md")).toBe(path.join(process.cwd(), "out", "relative"));
+    });
+
+    test("mdOptions.outputDir wins over outputDir for the Markdown files", () => {
+      const mdDir = path.join(process.cwd(), "out", "md-options");
+      runFullGenerator("smoke", {
+        generateMDFiles: true,
+        outputDir: path.join(process.cwd(), "out"),
+        mdOptions: { outputDir: mdDir }
+      });
+      expect(dirOf("SimpleModel.md")).toBe(mdDir);
     });
   });
 

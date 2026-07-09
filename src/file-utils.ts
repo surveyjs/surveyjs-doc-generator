@@ -22,3 +22,11 @@ export function checkFiles(fileNames: string[], errorText: string) {
 export function getAbsoluteFileName(name: string): string {
   return path.join(process.cwd(), name);
 }
+/** Resolves a directory against the working directory and creates it when missing. */
+export function ensureDir(dir: string): string {
+  const absDir = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+  if (!fs.existsSync(absDir)) {
+    fs.mkdirSync(absDir, { recursive: true });
+  }
+  return absDir;
+}
