@@ -1069,18 +1069,24 @@ function generateMDFiles(classes, pmes, options = {}) {
 }
 function generateIndexMD(classes, pmes, product = "Form Library", sourceBaseUrl) {
   const members = Array.isArray(pmes) ? pmes : [];
-  const entries = (Array.isArray(classes) ? classes : []).filter((cls) => !!cls && cls.entryType === 1 /* classType */ && !!cls.name && hasDescription(cls)).map((cls) => ({
+  const all = Array.isArray(classes) ? classes : [];
+  const lines = ["---", "title: Classes and Interfaces", "---"];
+  addIndexSection(lines, "Classes", all, 1 /* classType */, members, product, sourceBaseUrl);
+  addIndexSection(lines, "Interfaces", all, 2 /* interfaceType */, members, product, sourceBaseUrl);
+  return lines.join("\n") + "\n";
+}
+function addIndexSection(lines, title, classes, entryType, members, product, sourceBaseUrl) {
+  const entries = classes.filter((cls) => !!cls && cls.entryType === entryType && !!cls.name && hasDescription(cls)).map((cls) => ({
     name: cls.name,
     sentence: firstSentence(stripMarkdownLinks(cls.documentation)),
     count: members.filter((p) => p.className === cls.name && isVisibleMember(p)).length
   })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  const lines = ["---", "title: Classes", "---", "", "# Classes", ""];
+  lines.push("", "# " + title, "");
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const link = "[`" + entry.name + "`](" + sourceUrl(product, entry.name, sourceBaseUrl) + ".md)";
     lines.push("- " + link + (entry.sentence ? " \u2014 " + entry.sentence : ""));
   }
-  return lines.join("\n") + "\n";
 }
 function hasDescription(cls) {
   return !!cls && !!(cls.documentation || "").trim();
@@ -1109,7 +1115,7 @@ function generateMDForClass(cls, pmes, product, sourceBaseUrl) {
   parts.push("# `" + cls.name + "`");
   const description = (cls.documentation || "").trim();
   if (description) parts.push(description);
-  const inheritance = inheritanceSection(cls);
+  const inheritance = inheritanceSection(cls, product, sourceBaseUrl);
   if (inheritance) parts.push(inheritance);
   if (properties.length > 0) parts.push(propertiesSection(properties));
   if (methods.length > 0) parts.push(methodsSection(methods));
@@ -1134,10 +1140,14 @@ function frontMatter(cls, product, isInterface, sourceBaseUrl) {
   ];
   return lines.join("\n");
 }
-function inheritanceSection(cls) {
+function inheritanceSection(cls, product, sourceBaseUrl) {
   const all = Array.isArray(cls.allTypes) && cls.allTypes.length > 0 ? cls.allTypes : [cls.name];
   if (all.length <= 1) return "";
-  const chain = all.slice().reverse().map((t) => "`" + t + "`").join(" &rarr; ");
+  const chain = all.slice().reverse().map((t) => {
+    const code = "`" + t + "`";
+    if (t === cls.name) return code;
+    return "[" + code + "](" + sourceUrl(product, t, sourceBaseUrl) + ".md)";
+  }).join(" &rarr; ");
   return "## Inheritance\n\n" + chain;
 }
 function propertiesSection(properties) {
@@ -1146,6 +1156,7 @@ function propertiesSection(properties) {
     lines.push("**Type**: `" + typeString(prop.type, prop.returnTypeGenerics) + "`");
     const doc = (prop.documentation || "").trim();
     if (doc) lines.push(doc);
+    addRelatedAPIs(lines, prop);
     return lines.join("\n\n");
   });
   return "## Properties\n\n" + blocks.join("\n\n");
@@ -1159,6 +1170,7 @@ function methodsSection(methods) {
     if (doc) lines.push(doc);
     const table = parametersTable(method.parameters);
     if (table) lines.push("**Parameters:**\n\n" + table);
+    addRelatedAPIs(lines, method);
     return lines.join("\n\n");
   });
   return "## Methods\n\n" + blocks.join("\n\n");
@@ -1168,9 +1180,21 @@ function eventsSection(events) {
     const lines = ["### `" + event.name + "`"];
     const doc = (event.documentation || "").trim();
     if (doc) lines.push(doc);
+    addRelatedAPIs(lines, event);
     return lines.join("\n\n");
   });
   return "## Events\n\n" + blocks.join("\n\n");
+}
+function addRelatedAPIs(lines, member) {
+  const names = seeNames(member.see);
+  if (names.length === 0) return;
+  const links = names.map((name) => "[`" + name + "`](#" + name + ")");
+  lines.push("**Related APIs:** " + links.join(", "));
+}
+function seeNames(see) {
+  if (!see) return [];
+  const values = Array.isArray(see) ? see : [see];
+  return values.map((value) => oneLine(value).replace(/\*/g, "").trim()).filter((name) => !!name);
 }
 function returnValueLine(method) {
   const type = typeString(method.returnType, method.returnTypeGenerics);
