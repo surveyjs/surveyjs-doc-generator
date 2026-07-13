@@ -1,7 +1,10 @@
 {
   "name": "surveyjs-doc-generator",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "main": "index.js",
+  "bin": {
+    "surveyjs-doc-generator": "bin/cli.js"
+  },
   "typings": "index",
   "typescript": {
     "definition": "index"
